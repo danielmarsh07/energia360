@@ -25,7 +25,18 @@ const app = Fastify({ logger: true })
 // ──────────────────────────────────────────────
 
 app.register(cors, {
-  origin: env.CORS_ORIGIN,
+  origin: (origin, cb) => {
+    // Permite localhost em dev e qualquer subdomínio do Render em produção
+    const allowed = [
+      env.CORS_ORIGIN,
+      /\.onrender\.com$/,
+    ]
+    if (!origin || allowed.some(o => typeof o === 'string' ? o === origin : o.test(origin))) {
+      cb(null, true)
+    } else {
+      cb(new Error('Not allowed by CORS'), false)
+    }
+  },
   credentials: true,
 })
 

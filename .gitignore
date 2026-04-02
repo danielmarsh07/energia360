@@ -24,8 +24,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Prisma
-backend/prisma/migrations/
 
 # Vite cache
 frontend/.vite/
