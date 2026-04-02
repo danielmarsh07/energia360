@@ -1,0 +1,344 @@
+// Energia360 - Prisma Schema
+// Plataforma de monitoramento de energia solar residencial e comercial
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// AUTENTICAÇÃO E USUÁRIO
+// =============================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      UserRole @default(CLIENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile   ClientProfile?
+
+  @@map("users")
+}
+
+enum UserRole {
+  CLIENT
+  ADMIN
+}
+
+// =============================================
+// PERFIL DO CLIENTE
+// =============================================
+
+model ClientProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Dados pessoais / empresariais
+  fullName        String
+  documentType    DocumentType @default(CPF)
+  document        String?      // CPF ou CNPJ
+  responsibleName String?
+  observations    String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contacts        Contact[]
+  addressUnits    AddressUnit[]
+
+  @@map("client_profiles")
+}
+
+enum DocumentType {
+  CPF
+  CNPJ
+}
+
+// =============================================
+// CONTATOS
+// =============================================
+
+model Contact {
+  id              String      @id @default(cuid())
+  clientProfileId String
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  type            ContactType
+  value           String
+  label           String?     // ex: "Celular pessoal", "WhatsApp"
+  isPrimary       Boolean     @default(false)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("contacts")
+}
+
+enum ContactType {
+  EMAIL
+  PHONE
+  WHATSAPP
+}
+
+// =============================================
+// UNIDADES / ENDEREÇOS
+// =============================================
+
+model AddressUnit {
+  id              String        @id @default(cuid())
+  clientProfileId String
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  // Identificação
+  name            String        // ex: Casa principal, Chácara, Loja Centro
+  consumerUnitCode String?      // Código UC da concessionária
+  utility         String?       // Nome da concessionária (CEMIG, LIGHT, ENEL, etc.)
+
+  // Endereço
+  zipCode         String?
+  street          String?
+  number          String?
+  complement      String?
+  neighborhood    String?
+  city            String?
+  state           String?
+
+  observations    String?
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  energyPoints    EnergyPoint[]
+  utilityBills    UtilityBill[]
+  consumptionHistory ConsumptionHistory[]
+  alerts          Alert[]
+
+  @@map("address_units")
+}
+
+// =============================================
+// PONTOS DE ENERGIA
+// =============================================
+
+model EnergyPoint {
+  id              String          @id @default(cuid())
+  addressUnitId   String
+  addressUnit     AddressUnit     @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+
+  name            String
+  pointType       EnergyPointType @default(RESIDENTIAL)
+  hasSolar        Boolean         @default(false)
+
+  // Dados do sistema solar (quando hasSolar = true)
+  solarPowerKwp   Float?          // Potência em kWp
+  panelsCount     Int?
+  installDate     DateTime?
+  inverterModel   String?
+
+  technicalNotes  String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("energy_points")
+}
+
+enum EnergyPointType {
+  RESIDENTIAL
+  COMMERCIAL
+  RURAL
+  INDUSTRIAL
+}
+
+// =============================================
+// CONTAS DE ENERGIA
+// =============================================
+
+model UtilityBill {
+  id              String          @id @default(cuid())
+  addressUnitId   String
+  addressUnit     AddressUnit     @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+
+  referenceMonth  Int             // 1-12
+  referenceYear   Int
+  dueDate         DateTime?
+  status          BillStatus      @default(PENDING)
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  files           UtilityBillFile[]
+  extractedData   UtilityBillExtractedData?
+
+  @@map("utility_bills")
+}
+
+enum BillStatus {
+  PENDING       // Aguardando upload
+  UPLOADED      // Arquivo enviado
+  PROCESSING    // Processando OCR
+  EXTRACTED     // Dados extraídos, aguardando validação
+  VALIDATED     // Validado pelo usuário
+  FAILED        // Falha no processamento
+}
+
+model UtilityBillFile {
+  id            String       @id @default(cuid())
+  billId        String
+  bill          UtilityBill  @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  fileName      String
+  originalName  String
+  mimeType      String
+  fileSize      Int
+  filePath      String
+  extractedText String?      // Texto bruto extraído pelo OCR
+
+  uploadedAt    DateTime     @default(now())
+
+  @@map("utility_bill_files")
+}
+
+model UtilityBillExtractedData {
+  id                String      @id @default(cuid())
+  billId            String      @unique
+  bill              UtilityBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  // Dados principais da conta
+  utilityName       String?
+  consumerUnitCode  String?
+  referenceMonthStr String?
+
+  // Leituras
+  previousReading   Float?      // kWh - leitura anterior
+  currentReading    Float?      // kWh - leitura atual
+  consumptionKwh    Float?      // kWh consumido
+
+  // Solar / compensação
+  injectedEnergyKwh Float?      // energia injetada na rede
+  energyCreditsKwh  Float?      // créditos de energia disponíveis
+
+  // Valores financeiros
+  totalAmount       Float?      // valor total da conta
+  energyAmount      Float?      // valor da energia consumida
+  networkUsageFee   Float?      // taxa de uso da rede (TUSD)
+  avgConsumption    Float?      // média de consumo em kWh
+
+  // Datas
+  dueDate           DateTime?
+  readingDate       DateTime?
+
+  // Controle de qualidade
+  isManuallyReviewed Boolean    @default(false)
+  confidence        Float?      // 0-1: confiança do OCR
+  rawJson           Json?       // JSON bruto para auditoria
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@map("utility_bill_extracted_data")
+}
+
+// =============================================
+// HISTÓRICO DE CONSUMO
+// =============================================
+
+model ConsumptionHistory {
+  id                String      @id @default(cuid())
+  addressUnitId     String
+  addressUnit       AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+
+  month             Int
+  year              Int
+  consumptionKwh    Float?
+  totalAmount       Float?
+  injectedKwh       Float?
+  creditsKwh        Float?
+  estimatedSavings  Float?
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([addressUnitId, month, year])
+  @@map("consumption_history")
+}
+
+// =============================================
+// ALERTAS
+// =============================================
+
+model Alert {
+  id              String      @id @default(cuid())
+  addressUnitId   String
+  addressUnit     AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+
+  type            AlertType
+  severity        AlertSeverity @default(INFO)
+  title           String
+  message         String
+  isRead          Boolean     @default(false)
+  resolvedAt      DateTime?
+
+  referenceMonth  Int?
+  referenceYear   Int?
+
+  createdAt       DateTime    @default(now())
+
+  @@map("alerts")
+}
+
+enum AlertType {
+  HIGH_CONSUMPTION        // Consumo acima da média
+  HIGH_BILL               // Valor acima do histórico
+  GENERATION_DROP         // Queda brusca de geração
+  SOLAR_ISSUE             // Possível problema na instalação
+  INCONSISTENT_READING    // Leitura inconsistente
+  MISSING_BILL            // Meses sem envio de conta
+  GENERAL                 // Alerta geral
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+// =============================================
+// ARTIGOS E TUTORIAIS
+// =============================================
+
+model TutorialArticle {
+  id          String          @id @default(cuid())
+  slug        String          @unique
+  title       String
+  summary     String
+  content     String
+  category    TutorialCategory
+  readingTime Int?            // minutos
+  icon        String?
+  isPublished Boolean         @default(true)
+  order       Int             @default(0)
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("tutorial_articles")
+}
+
+enum TutorialCategory {
+  SOLAR_BASICS        // Como funciona a energia solar
+  BILLING             // Entendendo sua conta
+  MONITORING          // Monitoramento e acompanhamento
+  MAINTENANCE         // Manutenção e cuidados
+  FAQ                 // Perguntas frequentes
+  SAVINGS             // Economia e retorno
+}

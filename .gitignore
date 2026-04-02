@@ -1,0 +1,31 @@
+# Dependências
+node_modules/
+*/node_modules/
+
+# Build
+dist/
+build/
+*/dist/
+*/build/
+
+# Ambiente (NÃO enviar senhas ao GitHub)
+.env
+*/.env
+backend/.env
+
+# Uploads de arquivos
+backend/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Prisma
+backend/prisma/migrations/
+
+# Vite cache
+frontend/.vite/
