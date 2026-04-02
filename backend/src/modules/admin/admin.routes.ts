@@ -50,6 +50,25 @@ export async function adminRoutes(app: FastifyInstance) {
     })
   })
 
+  // PATCH /admin/users/:id/toggle - Ativa/desativa usuário
+  app.patch('/users/:id/toggle', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const user = await prisma.user.findUnique({ where: { id } })
+    if (!user) return reply.status(404).send({ error: 'Usuário não encontrado.' })
+    if (user.role === 'ADMIN') return reply.status(403).send({ error: 'Não é possível desativar administradores.' })
+    const updated = await prisma.user.update({ where: { id }, data: { isActive: !user.isActive } })
+    return reply.send({ id: updated.id, isActive: updated.isActive })
+  })
+
+  // POST /admin/bills/:id/reprocess - Reprocessa conta com falha
+  app.post('/bills/:id/reprocess', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const bill = await prisma.utilityBill.findUnique({ where: { id } })
+    if (!bill) return reply.status(404).send({ error: 'Conta não encontrada.' })
+    const updated = await prisma.utilityBill.update({ where: { id }, data: { status: 'UPLOADED' } })
+    return reply.send(updated)
+  })
+
   // GET /admin/bills - Lista uploads recentes com status
   app.get('/bills', async (req, reply) => {
     const { page = '1', status } = req.query as { page?: string; status?: string }

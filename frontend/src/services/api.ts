@@ -143,9 +143,20 @@ export const dashboardApi = {
 // =============================================
 // ADMIN
 // =============================================
+// =============================================
+// PLANS & SUBSCRIPTIONS
+// =============================================
+export const plansApi = {
+  list: () => api.get('/plans').then(r => r.data),
+  getSubscription: () => api.get('/plans/subscription').then(r => r.data),
+  changePlan: (planSlug: string) => api.patch('/plans/subscription', { planSlug }).then(r => r.data),
+}
+
 export const adminApi = {
   stats: () => api.get('/admin/stats').then(r => r.data),
   users: (page?: number) => api.get('/admin/users', { params: { page } }).then(r => r.data),
+  toggleUser: (id: string) => api.patch(`/admin/users/${id}/toggle`).then(r => r.data),
   bills: (page?: number, status?: string) =>
     api.get('/admin/bills', { params: { page, status } }).then(r => r.data),
+  reprocessBill: (id: string) => api.post(`/admin/bills/${id}/reprocess`).then(r => r.data),
 }

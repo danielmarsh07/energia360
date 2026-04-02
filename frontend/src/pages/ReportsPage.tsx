@@ -4,12 +4,37 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
-import { BarChart3, TrendingDown, Zap, DollarSign } from 'lucide-react'
+import { TrendingDown, Zap, DollarSign, Download } from 'lucide-react'
 import { dashboardApi, addressesApi } from '@/services/api'
-import { AddressUnit, MONTHS_PT } from '@/types'
+import { AddressUnit, MONTHS_PT, MONTHS_FULL_PT } from '@/types'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { StatCard } from '@/components/ui/StatCard'
+import { Button } from '@/components/ui/Button'
 import { formatCurrency, formatKwh } from '@/utils/format'
+
+function exportToCSV(history: Array<{
+  month: number; year: number; consumptionKwh: number
+  totalAmount: number; estimatedSavings: number; addressUnit?: { name: string }
+}>, year: number) {
+  const headers = ['Mês', 'Ano', 'Unidade', 'Consumo (kWh)', 'Valor (R$)', 'Economia (R$)']
+  const rows = history.map(h => [
+    MONTHS_FULL_PT[h.month - 1],
+    h.year,
+    h.addressUnit?.name || '',
+    (h.consumptionKwh || 0).toFixed(2),
+    (h.totalAmount || 0).toFixed(2),
+    (h.estimatedSavings || 0).toFixed(2),
+  ])
+  const csvContent = [headers, ...rows].map(row => row.join(';')).join('\n')
+  const bom = '\uFEFF'
+  const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `energia360-relatorio-${year}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 export default function ReportsPage() {
   const [selectedUnit, setSelectedUnit] = useState<string>('')
@@ -49,22 +74,34 @@ export default function ReportsPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-3 flex-wrap">
-        <select
-          className="input-field w-auto min-w-40"
-          value={selectedUnit}
-          onChange={e => setSelectedUnit(e.target.value)}
-        >
-          <option value="">Todas as unidades</option>
-          {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-        <select
-          className="input-field w-auto"
-          value={selectedYear}
-          onChange={e => setSelectedYear(Number(e.target.value))}
-        >
-          {years.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
+      <div className="flex gap-3 flex-wrap items-center justify-between">
+        <div className="flex gap-3 flex-wrap">
+          <select
+            className="input-field w-auto min-w-40"
+            value={selectedUnit}
+            onChange={e => setSelectedUnit(e.target.value)}
+          >
+            <option value="">Todas as unidades</option>
+            {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <select
+            className="input-field w-auto"
+            value={selectedYear}
+            onChange={e => setSelectedYear(Number(e.target.value))}
+          >
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        {reports?.history?.length > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => exportToCSV(reports.history, selectedYear)}
+            icon={<Download size={14} />}
+          >
+            Exportar CSV
+          </Button>
+        )}
       </div>
 
       {/* Cards de totais */}

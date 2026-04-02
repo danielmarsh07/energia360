@@ -50,6 +50,15 @@ export class BillsService {
 
   async create(unitId: string, userId: string, data: { referenceMonth: number; referenceYear: number }) {
     await this.verifyUnitOwnership(unitId, userId)
+
+    const existing = await prisma.utilityBill.findFirst({
+      where: { addressUnitId: unitId, referenceMonth: data.referenceMonth, referenceYear: data.referenceYear },
+    })
+    if (existing) {
+      const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+      throw new Error(`Já existe uma conta registrada para ${monthNames[data.referenceMonth - 1]}/${data.referenceYear}.`)
+    }
+
     return prisma.utilityBill.create({
       data: {
         addressUnitId: unitId,

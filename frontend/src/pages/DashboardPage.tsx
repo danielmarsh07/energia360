@@ -97,25 +97,28 @@ export default function DashboardPage() {
       {/* Cards de indicadores */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Unidades cadastradas"
+          title="Suas unidades"
           value={data?.totalUnits || 0}
+          subtitle="unidades monitoradas"
           icon={<MapPin size={20} className="text-primary-600" />}
           iconBg="bg-primary-50"
         />
         <StatCard
-          title="Consumo este mês"
+          title="Você consumiu este mês"
           value={data?.currentMonthConsumption ? formatKwh(data.currentMonthConsumption) : '—'}
+          subtitle="de energia elétrica"
           icon={<Zap size={20} className="text-yellow-600" />}
           iconBg="bg-yellow-50"
         />
         <StatCard
-          title="Valor este mês"
+          title="Sua conta este mês"
           value={data?.currentMonthAmount ? formatCurrency(data.currentMonthAmount) : '—'}
+          subtitle="valor estimado"
           icon={<DollarSign size={20} className="text-blue-600" />}
           iconBg="bg-blue-50"
         />
         <StatCard
-          title="Economia acumulada"
+          title="Você já economizou"
           value={data?.totalSavings ? formatCurrency(data.totalSavings) : '—'}
           subtitle="com energia solar"
           icon={<TrendingDown size={20} className="text-green-600" />}
@@ -127,10 +130,10 @@ export default function DashboardPage() {
         <Card>
           <EmptyState
             icon={<Sun size={32} />}
-            title="Comece monitorando sua energia"
-            description="Cadastre sua primeira unidade consumidora para começar a acompanhar seu consumo e economia."
+            title="Bem-vindo ao Energia360!"
+            description="Cadastre sua primeira unidade para começar a acompanhar seu consumo, economia e geração solar de forma inteligente."
             action={{
-              label: 'Cadastrar unidade',
+              label: 'Cadastrar minha primeira unidade',
               onClick: () => window.location.href = '/unidades/nova',
               icon: <Plus size={16} />,
             }}
@@ -141,7 +144,7 @@ export default function DashboardPage() {
           {/* Gráfico de consumo e valor */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
-              <CardHeader title="Consumo mensal (kWh)" subtitle="Últimos 12 meses" />
+              <CardHeader title="Veja quanto você consumiu" subtitle="Últimos 12 meses em kWh" />
               <ResponsiveContainer width="100%" height={220}>
                 <AreaChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
                   <defs>
@@ -166,7 +169,7 @@ export default function DashboardPage() {
             </Card>
 
             <Card>
-              <CardHeader title="Valor da conta (R$)" subtitle="Últimos 12 meses" />
+              <CardHeader title="Para onde vai seu dinheiro" subtitle="Valor mensal da conta de energia" />
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -182,8 +185,8 @@ export default function DashboardPage() {
           {/* Gráfico de economia */}
           <Card>
             <CardHeader
-              title="Economia estimada com energia solar"
-              subtitle="Valor economizado por mês com a compensação de créditos"
+              title="Sua economia mês a mês"
+              subtitle="Quanto você está economizando com o sistema solar"
             />
             <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
@@ -274,8 +277,8 @@ export default function DashboardPage() {
                   <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center mb-2">
                     <Bell size={20} className="text-green-500" />
                   </div>
-                  <p className="text-sm text-gray-500">Nenhum alerta ativo</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Tudo funcionando normalmente</p>
+                  <p className="text-sm text-gray-500">Nenhum alerta no momento</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Tudo funcionando dentro do esperado</p>
                 </div>
               ) : (
                 <ul className="space-y-2">

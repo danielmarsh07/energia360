@@ -23,7 +23,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile   ClientProfile?
+  profile      ClientProfile?
+  subscription Subscription?
 
   @@map("users")
 }
@@ -31,6 +32,11 @@ model User {
 enum UserRole {
   CLIENT
   ADMIN
+  ADMIN_MASTER
+  CLIENT_ADMIN
+  OPERATOR
+  TECHNICIAN
+  VIEWER
 }
 
 // =============================================
@@ -341,4 +347,68 @@ enum TutorialCategory {
   MAINTENANCE         // Manutenção e cuidados
   FAQ                 // Perguntas frequentes
   SAVINGS             // Economia e retorno
+}
+
+// =============================================
+// PLANOS E MÓDULOS (SaaS)
+// =============================================
+
+model Plan {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  features    String[]
+  maxUnits    Int      @default(1)
+  maxUsers    Int      @default(1)
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+
+  modules       PlanModule[]
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Module {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  description String?
+
+  plans PlanModule[]
+
+  @@map("modules")
+}
+
+model PlanModule {
+  planId   String
+  moduleId String
+  plan     Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  module   Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@id([planId, moduleId])
+  @@map("plan_modules")
+}
+
+model Subscription {
+  id        String             @id @default(cuid())
+  userId    String             @unique
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      Plan               @relation(fields: [planId], references: [id])
+  status    SubscriptionStatus @default(ACTIVE)
+  startedAt DateTime           @default(now())
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
 }

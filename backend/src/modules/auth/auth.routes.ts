@@ -7,7 +7,7 @@ const authService = new AuthService()
 
 export async function authRoutes(app: FastifyInstance) {
   // POST /auth/register
-  app.post('/register', async (request, reply) => {
+  app.post('/register', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     const result = registerSchema.safeParse(request.body)
     if (!result.success) {
       return reply.status(400).send({ error: result.error.issues[0].message })
@@ -27,7 +27,7 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // POST /auth/login
-  app.post('/login', async (request, reply) => {
+  app.post('/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     const result = loginSchema.safeParse(request.body)
     if (!result.success) {
       return reply.status(400).send({ error: result.error.issues[0].message })

@@ -3,6 +3,7 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import multipart from '@fastify/multipart'
+import rateLimit from '@fastify/rate-limit'
 import staticFiles from '@fastify/static'
 import path from 'path'
 import fs from 'fs'
@@ -17,12 +18,19 @@ import { tutorialsRoutes } from './modules/tutorials/tutorials.routes'
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes'
 import { profileRoutes } from './modules/profile/profile.routes'
 import { adminRoutes } from './modules/admin/admin.routes'
+import { plansRoutes } from './modules/plans/plans.routes'
 
 const app = Fastify({ logger: true })
 
 // ──────────────────────────────────────────────
 // Plugins globais
 // ──────────────────────────────────────────────
+
+app.register(rateLimit, {
+  max: 100,
+  timeWindow: '1 minute',
+  errorResponseBuilder: () => ({ error: 'Muitas requisições. Tente novamente em instantes.' }),
+})
 
 app.register(cors, {
   origin: (origin, cb) => {
@@ -72,6 +80,7 @@ app.register(alertsRoutes, { prefix: '/api/alerts' })
 app.register(tutorialsRoutes, { prefix: '/api/tutorials' })
 app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(adminRoutes, { prefix: '/api/admin' })
+app.register(plansRoutes, { prefix: '/api/plans' })
 
 // Health check
 app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))

@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { PrismaClient, UserRole, AlertType, AlertSeverity, TutorialCategory, BillStatus } from '@prisma/client'
+import { PrismaClient, UserRole, AlertType, AlertSeverity, TutorialCategory, BillStatus, SubscriptionStatus } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -374,6 +374,134 @@ async function main() {
   }
 
   console.log('✅ Artigos e tutoriais criados')
+
+  // ──────────────────────────────────────────
+  // Módulos do sistema
+  // ──────────────────────────────────────────
+  const modulesData = [
+    { slug: 'cadastro-360', name: 'Cadastro 360', description: 'Cadastro completo de perfil, unidades e contatos' },
+    { slug: 'contas-leitura', name: 'Contas & Leitura', description: 'Upload e visualização de contas de energia' },
+    { slug: 'leitura-inteligente', name: 'Leitura Inteligente', description: 'Extração automática de dados via OCR/IA' },
+    { slug: 'consumo-economia', name: 'Consumo & Economia', description: 'Dashboard de consumo e economia estimada' },
+    { slug: 'solar-analytics', name: 'Solar Analytics', description: 'Análise detalhada da geração solar' },
+    { slug: 'alertas-inteligentes', name: 'Alertas Inteligentes', description: 'Notificações automáticas de anomalias' },
+    { slug: 'relatorios-360', name: 'Relatórios 360', description: 'Relatórios avançados e exportação de dados' },
+    { slug: 'central-dicas', name: 'Central de Dicas', description: 'Artigos e tutoriais sobre energia solar' },
+    { slug: 'multiunidades', name: 'Multiunidades', description: 'Gerenciamento de múltiplas unidades consumidoras' },
+    { slug: 'painel-administrativo', name: 'Painel Administrativo', description: 'Gestão completa do sistema' },
+    { slug: 'portal-parceiro', name: 'Portal do Parceiro', description: 'Acesso multi-cliente para integradores' },
+  ]
+
+  const modules: Record<string, { id: string }> = {}
+  for (const m of modulesData) {
+    const mod = await prisma.module.upsert({
+      where: { slug: m.slug },
+      update: {},
+      create: m,
+    })
+    modules[m.slug] = mod
+  }
+
+  console.log('✅ Módulos criados')
+
+  // ──────────────────────────────────────────
+  // Planos
+  // ──────────────────────────────────────────
+  const plansData = [
+    {
+      slug: 'start',
+      name: 'Energia360 Start',
+      description: 'Comece a acompanhar sua conta de energia de forma simples e gratuita',
+      features: ['Cadastro de 1 unidade', 'Upload de contas de energia', 'Histórico básico de consumo', 'Central de dicas'],
+      maxUnits: 1,
+      maxUsers: 1,
+      order: 1,
+      moduleSlugs: ['cadastro-360', 'contas-leitura', 'central-dicas'],
+    },
+    {
+      slug: 'solar',
+      name: 'Energia360 Solar',
+      description: 'Entenda sua geração solar e maximize sua economia todo mês',
+      features: ['Até 2 unidades', 'Análise de geração solar', 'Dashboard de economia', 'Alertas automáticos', 'Relatórios mensais'],
+      maxUnits: 2,
+      maxUsers: 1,
+      order: 2,
+      moduleSlugs: ['cadastro-360', 'contas-leitura', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'central-dicas'],
+    },
+    {
+      slug: 'plus',
+      name: 'Energia360 Plus',
+      description: 'Automatize a leitura das suas contas e receba insights inteligentes',
+      features: ['Até 5 unidades', 'Leitura automática de contas (OCR)', 'Relatórios avançados', 'Exportação de dados', 'Todos os alertas'],
+      maxUnits: 5,
+      maxUsers: 2,
+      order: 3,
+      moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas'],
+    },
+    {
+      slug: 'business',
+      name: 'Energia360 Business',
+      description: 'Gerencie múltiplas unidades e reduza custos da sua operação',
+      features: ['Unidades ilimitadas', 'Múltiplos usuários', 'Gestão centralizada', 'Relatórios corporativos', 'Suporte prioritário'],
+      maxUnits: 999,
+      maxUsers: 10,
+      order: 4,
+      moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas', 'multiunidades', 'painel-administrativo'],
+    },
+    {
+      slug: 'partner',
+      name: 'Energia360 Partner',
+      description: 'Acompanhe seus clientes e ofereça mais valor com dados inteligentes',
+      features: ['Acesso multi-cliente', 'Portal do parceiro', 'Gestão de portfólio', 'Relatórios consolidados', 'Marca personalizada'],
+      maxUnits: 9999,
+      maxUsers: 999,
+      order: 5,
+      moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas', 'multiunidades', 'painel-administrativo', 'portal-parceiro'],
+    },
+  ]
+
+  const plans: Record<string, { id: string }> = {}
+  for (const { moduleSlugs, ...planData } of plansData) {
+    const plan = await prisma.plan.upsert({
+      where: { slug: planData.slug },
+      update: {},
+      create: planData,
+    })
+    plans[planData.slug] = plan
+
+    for (const slug of moduleSlugs) {
+      await prisma.planModule.upsert({
+        where: { planId_moduleId: { planId: plan.id, moduleId: modules[slug].id } },
+        update: {},
+        create: { planId: plan.id, moduleId: modules[slug].id },
+      })
+    }
+  }
+
+  console.log('✅ Planos e módulos criados')
+
+  // ──────────────────────────────────────────
+  // Assinaturas dos usuários demo
+  // ──────────────────────────────────────────
+  await prisma.subscription.upsert({
+    where: { userId: admin.id },
+    update: {},
+    create: { userId: admin.id, planId: plans['partner'].id, status: SubscriptionStatus.ACTIVE },
+  })
+
+  await prisma.subscription.upsert({
+    where: { userId: joaoUser.id },
+    update: {},
+    create: { userId: joaoUser.id, planId: plans['solar'].id, status: SubscriptionStatus.ACTIVE },
+  })
+
+  await prisma.subscription.upsert({
+    where: { userId: mariaUser.id },
+    update: {},
+    create: { userId: mariaUser.id, planId: plans['start'].id, status: SubscriptionStatus.ACTIVE },
+  })
+
+  console.log('✅ Assinaturas criadas')
 
   console.log('\n🎉 Seed concluído com sucesso!')
   console.log('\n📋 Credenciais de acesso:')

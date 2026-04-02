@@ -21,6 +21,7 @@ import AlertsPage from '@/pages/AlertsPage'
 import TutorialsPage from '@/pages/TutorialsPage'
 import ProfilePage from '@/pages/ProfilePage'
 import AdminPage from '@/pages/AdminPage'
+import PlansPage from '@/pages/PlansPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,6 +55,7 @@ export default function App() {
               <Route path="/dicas" element={<TutorialsPage />} />
               <Route path="/dicas/:slug" element={<TutorialsPage />} />
               <Route path="/perfil" element={<ProfilePage />} />
+              <Route path="/planos" element={<PlansPage />} />
 
               {/* Rota de admin */}
               <Route element={<ProtectedRoute adminOnly />}>

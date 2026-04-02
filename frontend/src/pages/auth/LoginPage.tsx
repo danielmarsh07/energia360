@@ -51,10 +51,10 @@ export default function LoginPage() {
 
         <div>
           <h2 className="text-4xl font-bold text-white leading-tight mb-4">
-            Controle total da sua energia solar
+            Controle sua energia, reduza seus custos e tome decisões inteligentes
           </h2>
           <p className="text-primary-200 text-lg leading-relaxed">
-            Acompanhe geração, consumo e economia de forma simples, visual e inteligente.
+            Acompanhe geração, consumo e economia de forma simples e visual. Tudo em um só lugar.
           </p>
 
           <div className="grid grid-cols-2 gap-4 mt-10">
@@ -91,8 +91,8 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Bem-vindo de volta</h1>
-            <p className="text-gray-500 mt-1">Entre na sua conta para continuar</p>
+            <h1 className="text-2xl font-bold text-gray-900">Bem-vindo ao Energia360</h1>
+            <p className="text-gray-500 mt-1">Entre na sua conta para continuar acompanhando sua energia</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -126,7 +126,7 @@ export default function LoginPage() {
             </div>
 
             <Button type="submit" size="lg" loading={isSubmitting} className="w-full mt-2">
-              Entrar na plataforma
+              Entrar na minha conta
             </Button>
           </form>
 

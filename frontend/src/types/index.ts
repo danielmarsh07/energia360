@@ -2,7 +2,8 @@
 // TIPOS DO SISTEMA ENERGIA360
 // =============================================
 
-export type UserRole = 'CLIENT' | 'ADMIN'
+export type UserRole = 'CLIENT' | 'ADMIN' | 'ADMIN_MASTER' | 'CLIENT_ADMIN' | 'OPERATOR' | 'TECHNICIAN' | 'VIEWER'
+export type SubscriptionStatus = 'ACTIVE' | 'CANCELLED' | 'EXPIRED'
 export type DocumentType = 'CPF' | 'CNPJ'
 export type ContactType = 'EMAIL' | 'PHONE' | 'WHATSAPP'
 export type EnergyPointType = 'RESIDENTIAL' | 'COMMERCIAL' | 'RURAL' | 'INDUSTRIAL'
@@ -210,6 +211,33 @@ export const ALERT_SEVERITY_LABELS: Record<AlertSeverity, string> = {
   INFO: 'Informação',
   WARNING: 'Atenção',
   CRITICAL: 'Crítico',
+}
+
+export interface PlanModule {
+  module: { slug: string; name: string }
+}
+
+export interface Plan {
+  id: string
+  slug: string
+  name: string
+  description: string
+  features: string[]
+  maxUnits: number
+  maxUsers: number
+  isActive: boolean
+  order: number
+  modules: PlanModule[]
+}
+
+export interface Subscription {
+  id: string
+  userId: string
+  planId: string
+  plan: Plan
+  status: SubscriptionStatus
+  startedAt: string
+  expiresAt?: string
 }
 
 export const TUTORIAL_CATEGORY_LABELS: Record<TutorialCategory, string> = {

@@ -1,20 +1,22 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MapPin, Zap, FileText, BarChart3, BookOpen,
-  Bell, User, LogOut, Sun, Settings,
+  Bell, User, LogOut, Sun, Settings, CreditCard,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/store/auth.store'
 import { getInitials } from '@/utils/format'
+import { useQuery } from '@tanstack/react-query'
+import { plansApi } from '@/services/api'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/unidades', icon: MapPin, label: 'Unidades' },
+  { to: '/unidades', icon: MapPin, label: 'Minhas Unidades' },
   { to: '/pontos-de-energia', icon: Zap, label: 'Pontos de Energia' },
   { to: '/contas', icon: FileText, label: 'Contas' },
   { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
-  { to: '/dicas', icon: BookOpen, label: 'Dicas e Tutoriais' },
   { to: '/alertas', icon: Bell, label: 'Alertas' },
+  { to: '/dicas', icon: BookOpen, label: 'Dicas' },
 ]
 
 interface SidebarProps {
@@ -25,10 +27,18 @@ export function Sidebar({ onClose }: SidebarProps) {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
 
+  const { data: subscription } = useQuery({
+    queryKey: ['subscription'],
+    queryFn: plansApi.getSubscription,
+    enabled: !!user,
+  })
+
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
+
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'ADMIN_MASTER'
 
   return (
     <aside className="flex flex-col h-full bg-white border-r border-gray-100">
@@ -41,7 +51,7 @@ export function Sidebar({ onClose }: SidebarProps) {
           <div>
             <span className="font-bold text-gray-900 text-base leading-none">Energia</span>
             <span className="font-bold text-primary-600 text-base leading-none">360</span>
-            <p className="text-xs text-gray-400 mt-0.5">Energia Solar</p>
+            <p className="text-xs text-gray-400 mt-0.5">Controle de energia</p>
           </div>
         </div>
       </div>
@@ -63,8 +73,25 @@ export function Sidebar({ onClose }: SidebarProps) {
           ))}
         </ul>
 
+        {/* Planos */}
+        <div className="mt-4 mb-2 px-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conta</p>
+        </div>
+        <ul className="space-y-0.5">
+          <li>
+            <NavLink
+              to="/planos"
+              onClick={onClose}
+              className={({ isActive }) => clsx('sidebar-item', isActive && 'active')}
+            >
+              <CreditCard size={18} className="shrink-0" />
+              <span>Meu Plano</span>
+            </NavLink>
+          </li>
+        </ul>
+
         {/* Admin */}
-        {user?.role === 'ADMIN' && (
+        {isAdmin && (
           <>
             <div className="mt-4 mb-2 px-3">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Administração</p>
@@ -84,6 +111,16 @@ export function Sidebar({ onClose }: SidebarProps) {
           </>
         )}
       </nav>
+
+      {/* Plano badge */}
+      {subscription?.plan && (
+        <div className="mx-3 mb-2 px-3 py-2 bg-primary-50 rounded-xl border border-primary-100">
+          <p className="text-xs text-primary-600 font-semibold truncate">{subscription.plan.name}</p>
+          <NavLink to="/planos" className="text-xs text-primary-400 hover:text-primary-600">
+            Ver planos →
+          </NavLink>
+        </div>
+      )}
 
       {/* Footer - Perfil */}
       <div className="px-3 py-3 border-t border-gray-100">
