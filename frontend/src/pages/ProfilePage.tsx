@@ -38,11 +38,14 @@ export default function ProfilePage() {
     queryFn: profileApi.get,
   })
 
-  const profileForm = useForm({ resolver: zodResolver(profileSchema), values: profile })
-  const passwordForm = useForm({ resolver: zodResolver(passwordSchema) })
+  type ProfileFormData = z.infer<typeof profileSchema>
+  type PasswordFormData = z.infer<typeof passwordSchema>
+
+  const profileForm = useForm<ProfileFormData>({ resolver: zodResolver(profileSchema), values: profile as ProfileFormData })
+  const passwordForm = useForm<PasswordFormData>({ resolver: zodResolver(passwordSchema) })
 
   const updateMutation = useMutation({
-    mutationFn: profileApi.update,
+    mutationFn: (data: ProfileFormData) => profileApi.update(data as Record<string, unknown>),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['profile'] })
       updateUser({ fullName: data.fullName })
@@ -170,21 +173,21 @@ export default function ProfilePage() {
             label="Senha atual"
             type="password"
             leftIcon={<Lock size={16} />}
-            error={passwordForm.formState.errors.currentPassword?.message}
+            error={passwordForm.formState.errors.currentPassword?.message as string | undefined}
             {...passwordForm.register('currentPassword')}
           />
           <Input
             label="Nova senha"
             type="password"
             leftIcon={<Lock size={16} />}
-            error={passwordForm.formState.errors.newPassword?.message}
+            error={passwordForm.formState.errors.newPassword?.message as string | undefined}
             {...passwordForm.register('newPassword')}
           />
           <Input
             label="Confirmar nova senha"
             type="password"
             leftIcon={<Lock size={16} />}
-            error={passwordForm.formState.errors.confirmPassword?.message}
+            error={passwordForm.formState.errors.confirmPassword?.message as string | undefined}
             {...passwordForm.register('confirmPassword')}
           />
           <Button type="submit" loading={changePasswordMutation.isPending}>

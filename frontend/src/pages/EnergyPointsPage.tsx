@@ -211,7 +211,7 @@ export default function EnergyPointsPage() {
                         onClick={() => deleteMutation.mutate(point.id)} />
                     </div>
                   </div>
-                  <Badge variant="default" size="sm" className="mt-1">
+                  <Badge variant="default" size="sm">
                     {ENERGY_POINT_TYPE_LABELS[point.pointType]}
                   </Badge>
                   {point.hasSolar && (
