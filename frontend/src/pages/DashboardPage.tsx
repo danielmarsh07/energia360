@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend
+  Tooltip, ResponsiveContainer
 } from 'recharts'
 import {
-  Zap, DollarSign, TrendingDown, MapPin, Bell, FileText,
+  Zap, DollarSign, TrendingDown, MapPin, Bell,
   Plus, ChevronRight, AlertTriangle, Info, Sun
 } from 'lucide-react'
 import { Link } from 'react-router-dom'

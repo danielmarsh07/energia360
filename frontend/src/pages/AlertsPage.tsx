@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, AlertTriangle, Info, CheckCircle, BellOff } from 'lucide-react'
+import { AlertTriangle, Info, CheckCircle, BellOff } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import { alertsApi } from '@/services/api'

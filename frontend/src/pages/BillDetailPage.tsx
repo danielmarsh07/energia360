@@ -36,8 +36,13 @@ export default function BillDetailPage() {
     enabled: !!id,
   })
 
-  const { register, handleSubmit } = useForm({
-    values: bill?.extractedData || {},
+  type BillFormData = {
+    consumptionKwh?: number; totalAmount?: number; injectedEnergyKwh?: number
+    energyCreditsKwh?: number; previousReading?: number; currentReading?: number
+    energyAmount?: number; networkUsageFee?: number
+  }
+  const { register, handleSubmit } = useForm<BillFormData>({
+    values: (bill?.extractedData || {}) as BillFormData,
   })
 
   const validateMutation = useMutation({
@@ -140,7 +145,7 @@ export default function BillDetailPage() {
             )}
           </div>
         ) : (
-          <form onSubmit={handleSubmit(validateMutation.mutate)} className="space-y-3">
+          <form onSubmit={handleSubmit((data) => validateMutation.mutate(data as Record<string, unknown>))} className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="Consumo (kWh)" type="number" step="0.01" {...register('consumptionKwh', { valueAsNumber: true })} />
               <Input label="Valor total (R$)" type="number" step="0.01" {...register('totalAmount', { valueAsNumber: true })} />

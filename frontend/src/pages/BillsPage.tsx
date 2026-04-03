@@ -2,8 +2,8 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-  FileText, Upload, Plus, Eye, Zap, DollarSign, Calendar,
-  CheckCircle, AlertCircle, Loader, Camera, X
+  FileText, Upload, Plus, Eye, Zap, DollarSign,
+  Loader, X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { addressesApi, billsApi, getApiError } from '@/services/api'

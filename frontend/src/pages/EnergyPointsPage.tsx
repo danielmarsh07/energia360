@@ -124,7 +124,7 @@ export default function EnergyPointsPage() {
       {(showForm || editing) && (
         <Card>
           <h2 className="section-title mb-4">{editing ? 'Editar ponto' : 'Novo ponto de energia'}</h2>
-          <form onSubmit={handleSubmit(editing ? updateMutation.mutate : createMutation.mutate)} className="space-y-4">
+          <form onSubmit={handleSubmit((data) => editing ? updateMutation.mutate(data) : createMutation.mutate(data))} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input label="Nome do ponto *" placeholder="Sistema Solar, Medidor Principal..." error={errors.name?.message} {...register('name')} />
               <div>

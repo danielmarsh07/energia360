@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { Bell, Menu, Search, X } from 'lucide-react'
+import { Bell, Menu } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth.store'
 import { getInitials } from '@/utils/format'
