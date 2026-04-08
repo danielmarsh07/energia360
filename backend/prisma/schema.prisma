@@ -25,8 +25,32 @@ model User {
 
   profile      ClientProfile?
   subscription Subscription?
+  aiUsageLogs  AiUsageLog[]
 
   @@map("users")
+}
+
+// =============================================
+// LOG DE USO DE IA
+// =============================================
+
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  billId       String?  // qual conta foi analisada
+  model        String   // ex: claude-haiku-4-5-20251001
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+  costUsd      Float    @default(0)
+  action       String   @default("bill_extraction")
+  planSlug     String?  // snapshot do plano no momento do uso
+  success      Boolean  @default(true)
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  @@map("ai_usage_logs")
 }
 
 enum UserRole {
@@ -198,18 +222,20 @@ enum BillStatus {
 }
 
 model UtilityBillFile {
-  id            String       @id @default(cuid())
-  billId        String
-  bill          UtilityBill  @relation(fields: [billId], references: [id], onDelete: Cascade)
+  id                  String       @id @default(cuid())
+  billId              String
+  bill                UtilityBill  @relation(fields: [billId], references: [id], onDelete: Cascade)
 
-  fileName      String
-  originalName  String
-  mimeType      String
-  fileSize      Int
-  filePath      String
-  extractedText String?      // Texto bruto extraído pelo OCR
+  fileName            String
+  originalName        String
+  mimeType            String
+  fileSize            Int
+  filePath            String
+  cloudinaryUrl       String?      // URL pública no Cloudinary
+  cloudinaryPublicId  String?      // ID para deletar/gerenciar no Cloudinary
+  extractedText       String?      // Texto bruto extraído pelo OCR
 
-  uploadedAt    DateTime     @default(now())
+  uploadedAt          DateTime     @default(now())
 
   @@map("utility_bill_files")
 }
@@ -354,15 +380,16 @@ enum TutorialCategory {
 // =============================================
 
 model Plan {
-  id          String   @id @default(cuid())
-  slug        String   @unique
-  name        String
-  description String
-  features    String[]
-  maxUnits    Int      @default(1)
-  maxUsers    Int      @default(1)
-  isActive    Boolean  @default(true)
-  order       Int      @default(0)
+  id                    String   @id @default(cuid())
+  slug                  String   @unique
+  name                  String
+  description           String
+  features              String[]
+  maxUnits              Int      @default(1)
+  maxUsers              Int      @default(1)
+  aiExtractionsPerMonth Int?     // null = ilimitado
+  isActive              Boolean  @default(true)
+  order                 Int      @default(0)
 
   modules       PlanModule[]
   subscriptions Subscription[]

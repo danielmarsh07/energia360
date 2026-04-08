@@ -1,9 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { BillsService } from './bills.service'
 import { authenticate } from '../../shared/middleware/authenticate'
-import path from 'path'
-import fs from 'fs'
-import { env } from '../../config/env'
 
 const service = new BillsService()
 
@@ -51,13 +48,12 @@ export async function billsRoutes(app: FastifyInstance) {
     }
   })
 
-  // POST /bills/:billId/upload - Upload de arquivo
+  // POST /bills/:billId/upload - Upload de arquivo para Cloudinary
   app.post('/:billId/upload', async (req, reply) => {
     const { sub } = req.user as { sub: string }
     const { billId } = req.params as { billId: string }
 
     try {
-      // Verifica se a conta pertence ao usuário
       await service.findById(billId, sub)
 
       const data = await req.file()
@@ -70,25 +66,23 @@ export async function billsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Tipo de arquivo não permitido. Use PDF, JPG ou PNG.' })
       }
 
-      // Cria diretório de upload se não existir
-      const uploadDir = path.resolve(env.UPLOAD_DIR, billId)
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true })
-      }
-
-      const ext = data.filename.split('.').pop()
-      const fileName = `${Date.now()}.${ext}`
-      const filePath = path.join(uploadDir, fileName)
-
       const buffer = await data.toBuffer()
-      fs.writeFileSync(filePath, buffer)
+
+      // Upload para Cloudinary (armazenamento persistente)
+      const { url: cloudinaryUrl, publicId: cloudinaryPublicId } =
+        await service.uploadToCloudinary(buffer, data.filename, data.mimetype, billId)
+
+      const ext = data.filename.split('.').pop() ?? 'bin'
+      const fileName = `${Date.now()}.${ext}`
 
       const file = await service.attachFile(billId, {
         fileName,
         originalName: data.filename,
         mimeType: data.mimetype,
         fileSize: buffer.length,
-        filePath,
+        filePath: cloudinaryUrl, // mantemos compatibilidade usando filePath para a URL
+        cloudinaryUrl,
+        cloudinaryPublicId,
       })
 
       return reply.status(201).send(file)
@@ -98,13 +92,12 @@ export async function billsRoutes(app: FastifyInstance) {
     }
   })
 
-  // POST /bills/:billId/extract - Dispara extração de dados (mock/OCR)
+  // POST /bills/:billId/extract - Extração real com Claude AI
   app.post('/:billId/extract', async (req, reply) => {
     const { sub } = req.user as { sub: string }
     const { billId } = req.params as { billId: string }
     try {
-      await service.findById(billId, sub) // verifica ownership
-      const data = await service.mockExtract(billId)
+      const data = await service.extractWithAI(billId, sub)
       return reply.send({ message: 'Dados extraídos com sucesso.', data })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro na extração.'

@@ -159,4 +159,7 @@ export const adminApi = {
   bills: (page?: number, status?: string) =>
     api.get('/admin/bills', { params: { page, status } }).then(r => r.data),
   reprocessBill: (id: string) => api.post(`/admin/bills/${id}/reprocess`).then(r => r.data),
+  aiUsage: (period?: 'month' | 'all') =>
+    api.get('/admin/ai-usage', { params: { period } }).then(r => r.data),
+  aiUsagePlansQuota: () => api.get('/admin/ai-usage/plans-quota').then(r => r.data),
 }

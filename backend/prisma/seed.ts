@@ -415,6 +415,7 @@ async function main() {
       features: ['Cadastro de 1 unidade', 'Upload de contas de energia', 'Histórico básico de consumo', 'Central de dicas'],
       maxUnits: 1,
       maxUsers: 1,
+      aiExtractionsPerMonth: 3,
       order: 1,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'central-dicas'],
     },
@@ -425,6 +426,7 @@ async function main() {
       features: ['Até 2 unidades', 'Análise de geração solar', 'Dashboard de economia', 'Alertas automáticos', 'Relatórios mensais'],
       maxUnits: 2,
       maxUsers: 1,
+      aiExtractionsPerMonth: 10,
       order: 2,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'central-dicas'],
     },
@@ -432,9 +434,10 @@ async function main() {
       slug: 'plus',
       name: 'Energia360 Plus',
       description: 'Automatize a leitura das suas contas e receba insights inteligentes',
-      features: ['Até 5 unidades', 'Leitura automática de contas (OCR)', 'Relatórios avançados', 'Exportação de dados', 'Todos os alertas'],
+      features: ['Até 5 unidades', 'Leitura automática de contas (IA)', 'Relatórios avançados', 'Exportação de dados', 'Todos os alertas'],
       maxUnits: 5,
       maxUsers: 2,
+      aiExtractionsPerMonth: 30,
       order: 3,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas'],
     },
@@ -445,6 +448,7 @@ async function main() {
       features: ['Unidades ilimitadas', 'Múltiplos usuários', 'Gestão centralizada', 'Relatórios corporativos', 'Suporte prioritário'],
       maxUnits: 999,
       maxUsers: 10,
+      aiExtractionsPerMonth: 200,
       order: 4,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas', 'multiunidades', 'painel-administrativo'],
     },
@@ -455,6 +459,7 @@ async function main() {
       features: ['Acesso multi-cliente', 'Portal do parceiro', 'Gestão de portfólio', 'Relatórios consolidados', 'Marca personalizada'],
       maxUnits: 9999,
       maxUsers: 999,
+      aiExtractionsPerMonth: null, // ilimitado
       order: 5,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas', 'multiunidades', 'painel-administrativo', 'portal-parceiro'],
     },
@@ -464,7 +469,7 @@ async function main() {
   for (const { moduleSlugs, ...planData } of plansData) {
     const plan = await prisma.plan.upsert({
       where: { slug: planData.slug },
-      update: {},
+      update: { aiExtractionsPerMonth: planData.aiExtractionsPerMonth, features: planData.features },
       create: planData,
     })
     plans[planData.slug] = plan

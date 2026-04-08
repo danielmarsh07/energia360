@@ -69,6 +69,136 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send(updated)
   })
 
+  // GET /admin/ai-usage - Resumo de uso de IA (tokens + custo)
+  app.get('/ai-usage', async (req, reply) => {
+    const { period = 'month' } = req.query as { period?: 'month' | 'all' }
+
+    const now = new Date()
+    const since = period === 'month' ? new Date(now.getFullYear(), now.getMonth(), 1) : new Date(0)
+
+    const [totalStats, byPlan, byUser, dailyUsage] = await Promise.all([
+      // Totais gerais
+      prisma.aiUsageLog.aggregate({
+        where: { createdAt: { gte: since } },
+        _sum: { inputTokens: true, outputTokens: true, totalTokens: true, costUsd: true },
+        _count: { id: true },
+      }),
+
+      // Agrupado por plano
+      prisma.aiUsageLog.groupBy({
+        by: ['planSlug'],
+        where: { createdAt: { gte: since } },
+        _sum: { totalTokens: true, costUsd: true },
+        _count: { id: true },
+        orderBy: { _sum: { totalTokens: 'desc' } },
+      }),
+
+      // Top usuários
+      prisma.aiUsageLog.groupBy({
+        by: ['userId'],
+        where: { createdAt: { gte: since } },
+        _sum: { totalTokens: true, costUsd: true },
+        _count: { id: true },
+        orderBy: { _sum: { totalTokens: 'desc' } },
+        take: 10,
+      }),
+
+      // Uso diário (últimos 30 dias)
+      prisma.$queryRaw<{ date: string; tokens: bigint; cost: number; count: bigint }[]>`
+        SELECT
+          DATE(created_at)::text AS date,
+          SUM(total_tokens) AS tokens,
+          SUM(cost_usd) AS cost,
+          COUNT(id) AS count
+        FROM ai_usage_logs
+        WHERE created_at >= ${since}
+        GROUP BY DATE(created_at)
+        ORDER BY date ASC
+      `,
+    ])
+
+    // Enriquecer byUser com email
+    const userIds = byUser.map(u => u.userId)
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, email: true, profile: { select: { fullName: true } } },
+    })
+    const userMap = Object.fromEntries(users.map(u => [u.id, u]))
+
+    return reply.send({
+      period,
+      totals: {
+        extractions: totalStats._count.id,
+        inputTokens: totalStats._sum.inputTokens ?? 0,
+        outputTokens: totalStats._sum.outputTokens ?? 0,
+        totalTokens: totalStats._sum.totalTokens ?? 0,
+        costUsd: +(totalStats._sum.costUsd ?? 0).toFixed(4),
+      },
+      byPlan: byPlan.map(p => ({
+        planSlug: p.planSlug ?? 'sem-plano',
+        extractions: p._count.id,
+        totalTokens: p._sum.totalTokens ?? 0,
+        costUsd: +(p._sum.costUsd ?? 0).toFixed(4),
+      })),
+      byUser: byUser.map(u => ({
+        userId: u.userId,
+        email: userMap[u.userId]?.email ?? '—',
+        name: userMap[u.userId]?.profile?.fullName ?? '—',
+        extractions: u._count.id,
+        totalTokens: u._sum.totalTokens ?? 0,
+        costUsd: +(u._sum.costUsd ?? 0).toFixed(4),
+      })),
+      daily: dailyUsage.map(d => ({
+        date: d.date,
+        tokens: Number(d.tokens),
+        cost: +Number(d.cost).toFixed(4),
+        count: Number(d.count),
+      })),
+    })
+  })
+
+  // GET /admin/ai-usage/plans-quota - limites e uso por plano este mês
+  app.get('/ai-usage/plans-quota', async (_req, reply) => {
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    const plans = await prisma.plan.findMany({
+      where: { isActive: true },
+      include: {
+        subscriptions: {
+          where: { status: 'ACTIVE' },
+          select: { userId: true },
+        },
+      },
+      orderBy: { order: 'asc' },
+    })
+
+    const result = await Promise.all(plans.map(async (plan) => {
+      const userIds = plan.subscriptions.map(s => s.userId)
+      const usage = await prisma.aiUsageLog.aggregate({
+        where: {
+          userId: { in: userIds },
+          createdAt: { gte: startOfMonth },
+          success: true,
+        },
+        _sum: { totalTokens: true, costUsd: true },
+        _count: { id: true },
+      })
+
+      return {
+        planSlug: plan.slug,
+        planName: plan.name,
+        subscribers: userIds.length,
+        aiExtractionsPerMonth: plan.aiExtractionsPerMonth,
+        extractionsUsed: usage._count.id,
+        totalTokens: usage._sum.totalTokens ?? 0,
+        costUsd: +(usage._sum.costUsd ?? 0).toFixed(4),
+      }
+    }))
+
+    return reply.send(result)
+  })
+
   // GET /admin/bills - Lista uploads recentes com status
   app.get('/bills', async (req, reply) => {
     const { page = '1', status } = req.query as { page?: string; status?: string }

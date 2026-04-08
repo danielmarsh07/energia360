@@ -10,6 +10,13 @@ const envSchema = z.object({
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_FILE_SIZE: z.coerce.number().default(10 * 1024 * 1024), // 10MB
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  // Anthropic / Claude AI
+  ANTHROPIC_API_KEY: z.string().min(1),
+  AI_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  // Cloudinary
+  CLOUDINARY_CLOUD_NAME: z.string().min(1),
+  CLOUDINARY_API_KEY: z.string().min(1),
+  CLOUDINARY_API_SECRET: z.string().min(1),
 })
 
 const parsed = envSchema.safeParse(process.env)
