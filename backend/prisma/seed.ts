@@ -28,6 +28,20 @@ async function main() {
     },
   })
 
+  // Promove o superadmin da plataforma (owner)
+  await prisma.user.upsert({
+    where: { email: 'daniel.marsh.sap@gmail.com' },
+    update: { role: UserRole.ADMIN_MASTER },
+    create: {
+      email: 'daniel.marsh.sap@gmail.com',
+      password: adminPassword,
+      role: UserRole.ADMIN_MASTER,
+      profile: {
+        create: { fullName: 'Daniel Marsh' },
+      },
+    },
+  })
+
   const joaoUser = await prisma.user.upsert({
     where: { email: 'joao.silva@email.com' },
     update: {},
