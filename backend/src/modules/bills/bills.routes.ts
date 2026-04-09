@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { BillsService } from './bills.service'
 import { authenticate } from '../../shared/middleware/authenticate'
+import { prisma } from '../../lib/prisma'
 
 const service = new BillsService()
 
@@ -114,6 +115,24 @@ export async function billsRoutes(app: FastifyInstance) {
       return reply.send(bill)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao validar.'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
+  // DELETE /bills/:billId - Exclui uma conta e seus arquivos
+  app.delete('/:billId', async (req, reply) => {
+    const { sub } = req.user as { sub: string }
+    const { billId } = req.params as { billId: string }
+    try {
+      const bill = await service.findById(billId, sub)
+      // Remove arquivos do Cloudinary
+      for (const file of bill.files) {
+        await service.deleteFile(file.id, sub).catch(() => null)
+      }
+      await prisma.utilityBill.delete({ where: { id: billId } })
+      return reply.send({ message: 'Conta excluída.' })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao excluir.'
       return reply.status(400).send({ error: msg })
     }
   })

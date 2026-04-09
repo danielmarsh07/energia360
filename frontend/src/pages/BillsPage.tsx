@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   FileText, Upload, Plus, Eye, Zap, DollarSign,
-  Loader, X
+  Loader, X, Trash2, RefreshCw
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { addressesApi, billsApi, getApiError } from '@/services/api'
@@ -176,6 +176,16 @@ export default function BillsPage() {
   const [uploadBill, setUploadBill] = useState<UtilityBill | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  const deleteMutation = useMutation({
+    mutationFn: (billId: string) => billsApi.delete(billId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bills'] })
+      toast.success('Conta excluída.')
+    },
+    onError: (err) => toast.error(getApiError(err)),
+  })
 
   const { data: units = [] } = useQuery<AddressUnit[]>({
     queryKey: ['addresses'],
@@ -289,14 +299,14 @@ export default function BillsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {(bill.status === 'PENDING' || bill.status === 'UPLOADED') && (
+                  {(bill.status === 'PENDING' || bill.status === 'UPLOADED' || bill.status === 'FAILED') && (
                     <Button
                       variant="secondary"
                       size="sm"
-                      icon={<Upload size={14} />}
+                      icon={bill.status === 'FAILED' ? <RefreshCw size={14} /> : <Upload size={14} />}
                       onClick={() => setUploadBill({ ...bill, addressUnit: activeUnit })}
                     >
-                      Enviar PDF
+                      {bill.status === 'FAILED' ? 'Reenviar' : 'Enviar PDF'}
                     </Button>
                   )}
                   {(bill.status === 'EXTRACTED' || bill.status === 'VALIDATED') && (
@@ -309,6 +319,17 @@ export default function BillsPage() {
                       Ver dados
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Trash2 size={14} className="text-red-400" />}
+                    loading={deleteMutation.isPending && deleteMutation.variables === bill.id}
+                    onClick={() => {
+                      if (confirm(`Excluir a conta de ${formatMonthYear(bill.referenceMonth, bill.referenceYear)}?`)) {
+                        deleteMutation.mutate(bill.id)
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </Card>

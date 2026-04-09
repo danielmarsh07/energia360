@@ -111,6 +111,7 @@ export const billsApi = {
     api.post(`/bills/${billId}/validate`, data).then(r => r.data),
   getHistory: (unitId: string) =>
     api.get(`/bills/unit/${unitId}/history`).then(r => r.data),
+  delete: (billId: string) => api.delete(`/bills/${billId}`).then(r => r.data),
 }
 
 // =============================================
