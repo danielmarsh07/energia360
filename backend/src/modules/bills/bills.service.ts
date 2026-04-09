@@ -3,8 +3,6 @@ import { prisma } from '../../lib/prisma'
 import { env } from '../../config/env'
 import Anthropic from '@anthropic-ai/sdk'
 import { v2 as cloudinary } from 'cloudinary'
-import https from 'https'
-import http from 'http'
 
 // =============================================
 // Configuração Cloudinary
@@ -64,18 +62,15 @@ Regras:
 - confidence deve refletir a qualidade da imagem e clareza dos dados`
 
 // =============================================
-// Helper: download de URL para buffer
+// Helper: download de URL para buffer (com redirect)
 // =============================================
-function downloadBuffer(url: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const client = url.startsWith('https') ? https : http
-    client.get(url, (res) => {
-      const chunks: Buffer[] = []
-      res.on('data', (chunk) => chunks.push(chunk))
-      res.on('end', () => resolve(Buffer.concat(chunks)))
-      res.on('error', reject)
-    }).on('error', reject)
-  })
+async function downloadBuffer(url: string): Promise<Buffer> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Falha ao baixar arquivo: HTTP ${res.status}`)
+  const arrayBuffer = await res.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  if (buffer.length === 0) throw new Error('Arquivo baixado está vazio.')
+  return buffer
 }
 
 // =============================================
@@ -261,31 +256,35 @@ export class BillsService {
     let errorMessage: string | undefined
 
     try {
-      // Baixar o arquivo para enviar como base64
-      const buffer = await downloadBuffer(fileUrl)
-      const base64 = buffer.toString('base64')
       const isPdf = file.mimeType === 'application/pdf'
 
       // Montar o conteúdo para a API do Claude
-      const messageContent: Anthropic.MessageParam['content'] = isPdf
-        ? [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-            } as Anthropic.DocumentBlockParam,
-            { type: 'text', text: EXTRACTION_PROMPT },
-          ]
-        : [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: file.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-                data: base64,
-              },
-            } as Anthropic.ImageBlockParam,
-            { type: 'text', text: EXTRACTION_PROMPT },
-          ]
+      // Imagens: URL direta (mais simples, sem download)
+      // PDFs: base64 obrigatório na API do Claude
+      let messageContent: Anthropic.MessageParam['content']
+
+      if (isPdf) {
+        const buffer = await downloadBuffer(fileUrl)
+        const base64 = buffer.toString('base64')
+        messageContent = [
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+          } as Anthropic.DocumentBlockParam,
+          { type: 'text', text: EXTRACTION_PROMPT },
+        ]
+      } else {
+        messageContent = [
+          {
+            type: 'image',
+            source: {
+              type: 'url',
+              url: fileUrl,
+            },
+          } as Anthropic.ImageBlockParam,
+          { type: 'text', text: EXTRACTION_PROMPT },
+        ]
+      }
 
       const response = await anthropic.messages.create({
         model,
