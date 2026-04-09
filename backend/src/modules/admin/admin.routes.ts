@@ -2,6 +2,13 @@ import { FastifyInstance } from 'fastify'
 import { prisma } from '../../lib/prisma'
 import { authenticate } from '../../shared/middleware/authenticate'
 import { requireAdmin } from '../../shared/middleware/requireAdmin'
+import { v2 as cloudinary } from 'cloudinary'
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
 
 export async function adminRoutes(app: FastifyInstance) {
 
@@ -20,6 +27,52 @@ export async function adminRoutes(app: FastifyInstance) {
     }).catch(() => null)
     if (!user) return reply.status(404).send({ error: 'Usuário não encontrado.' })
     return reply.send({ message: `${email} promovido para ADMIN_MASTER.`, user })
+  })
+
+  // POST /admin/cleanup - Apaga arquivos, clientes extras e logs de IA (protegido por chave)
+  app.post('/cleanup', async (req, reply) => {
+    const { key } = req.body as { key?: string }
+    const bootstrapKey = process.env.BOOTSTRAP_KEY
+    if (!bootstrapKey || key !== bootstrapKey) {
+      return reply.status(403).send({ error: 'Chave inválida.' })
+    }
+
+    // 1. Deleta arquivos do Cloudinary
+    const files = await prisma.utilityBillFile.findMany({ where: { cloudinaryPublicId: { not: null } } })
+    let cloudinaryDeleted = 0
+    for (const f of files) {
+      if (f.cloudinaryPublicId) {
+        const resourceType = f.mimeType === 'application/pdf' ? 'raw' : 'image'
+        await cloudinary.uploader.destroy(f.cloudinaryPublicId, { resource_type: resourceType }).catch(() => null)
+        cloudinaryDeleted++
+      }
+    }
+
+    // 2. Deleta todos os logs de uso de IA
+    const { count: logsDeleted } = await prisma.aiUsageLog.deleteMany()
+
+    // 3. Deleta todas as contas de energia (cascades: files, extractedData)
+    const { count: billsDeleted } = await prisma.utilityBill.deleteMany()
+
+    // 4. Deleta histórico de consumo
+    await prisma.consumptionHistory.deleteMany()
+
+    // 5. Deleta alertas
+    await prisma.alert.deleteMany()
+
+    // 6. Deleta usuários que não são admin/demo
+    const KEEP_EMAILS = ['joao.silva@email.com', 'admin@energia360.com', 'daniel.marsh.sap@gmail.com']
+    const { count: usersDeleted } = await prisma.user.deleteMany({
+      where: { email: { notIn: KEEP_EMAILS } },
+    })
+
+    return reply.send({
+      message: 'Cleanup concluído.',
+      cloudinaryDeleted,
+      logsDeleted,
+      billsDeleted,
+      usersDeleted,
+    })
   })
 
   app.addHook('preHandler', authenticate)
