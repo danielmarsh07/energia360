@@ -29,12 +29,14 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send({ message: `${email} promovido para ADMIN_MASTER.`, user })
   })
 
-  // POST /admin/cleanup - Apaga arquivos, clientes extras e logs de IA (protegido por chave)
+  app.addHook('preHandler', authenticate)
+  app.addHook('preHandler', requireAdmin)
+
+  // POST /admin/cleanup - Apaga arquivos, clientes extras e logs de IA (só ADMIN_MASTER)
   app.post('/cleanup', async (req, reply) => {
-    const { key } = req.body as { key?: string }
-    const bootstrapKey = process.env.BOOTSTRAP_KEY
-    if (!bootstrapKey || key !== bootstrapKey) {
-      return reply.status(403).send({ error: 'Chave inválida.' })
+    const user = req.user as { sub: string; role: string }
+    if (user.role !== 'ADMIN_MASTER') {
+      return reply.status(403).send({ error: 'Apenas ADMIN_MASTER pode executar o cleanup.' })
     }
 
     // 1. Deleta arquivos do Cloudinary
@@ -54,13 +56,11 @@ export async function adminRoutes(app: FastifyInstance) {
     // 3. Deleta todas as contas de energia (cascades: files, extractedData)
     const { count: billsDeleted } = await prisma.utilityBill.deleteMany()
 
-    // 4. Deleta histórico de consumo
+    // 4. Deleta histórico de consumo e alertas
     await prisma.consumptionHistory.deleteMany()
-
-    // 5. Deleta alertas
     await prisma.alert.deleteMany()
 
-    // 6. Deleta usuários que não são admin/demo
+    // 5. Deleta usuários que não são admin/demo
     const KEEP_EMAILS = ['joao.silva@email.com', 'admin@energia360.com', 'daniel.marsh.sap@gmail.com']
     const { count: usersDeleted } = await prisma.user.deleteMany({
       where: { email: { notIn: KEEP_EMAILS } },
@@ -74,9 +74,6 @@ export async function adminRoutes(app: FastifyInstance) {
       usersDeleted,
     })
   })
-
-  app.addHook('preHandler', authenticate)
-  app.addHook('preHandler', requireAdmin)
 
   // GET /admin/stats - Métricas gerais
   app.get('/stats', async (_req, reply) => {
