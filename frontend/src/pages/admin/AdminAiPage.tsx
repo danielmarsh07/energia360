@@ -19,21 +19,25 @@ const PLAN_COLORS: Record<string, string> = {
 export default function AdminAiPage() {
   const [period, setPeriod] = useState<'month' | 'all'>('month')
 
-  const { data: aiUsage } = useQuery({
+  const { data: aiUsage, isError: aiUsageError } = useQuery({
     queryKey: ['admin-ai-usage', period],
     queryFn: () => adminApi.aiUsage(period),
+    retry: 1,
   })
   const { data: plansQuota } = useQuery({
     queryKey: ['admin-ai-plans-quota'],
     queryFn: adminApi.aiUsagePlansQuota,
+    retry: 1,
   })
   const { data: byUnit } = useQuery({
     queryKey: ['admin-ai-by-unit', period],
     queryFn: () => adminApi.aiUsageByUnit(period),
+    retry: 1,
   })
   const { data: byBill } = useQuery({
     queryKey: ['admin-ai-by-bill', period],
     queryFn: () => adminApi.aiUsageByBill(period),
+    retry: 1,
   })
 
   return (
@@ -54,12 +58,16 @@ export default function AdminAiPage() {
       </div>
 
       {/* Totais */}
-      {aiUsage && (
+      {aiUsageError ? (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          Erro ao carregar dados de uso de IA. Tente recarregar a página.
+        </div>
+      ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Extrações" value={aiUsage.totals.extractions} icon={<Brain size={18} className="text-purple-600" />} iconBg="bg-purple-50" />
-          <StatCard title="Tokens totais" value={aiUsage.totals.totalTokens.toLocaleString('pt-BR')} icon={<Zap size={18} className="text-yellow-600" />} iconBg="bg-yellow-50" />
-          <StatCard title="Tokens entrada" value={aiUsage.totals.inputTokens.toLocaleString('pt-BR')} icon={<TrendingUp size={18} className="text-blue-600" />} iconBg="bg-blue-50" />
-          <StatCard title="Custo estimado" value={`$${aiUsage.totals.costUsd.toFixed(4)}`} icon={<DollarSign size={18} className="text-green-600" />} iconBg="bg-green-50" />
+          <StatCard title="Extrações" value={aiUsage?.totals.extractions ?? '—'} icon={<Brain size={18} className="text-purple-600" />} iconBg="bg-purple-50" />
+          <StatCard title="Tokens totais" value={aiUsage ? aiUsage.totals.totalTokens.toLocaleString('pt-BR') : '—'} icon={<Zap size={18} className="text-yellow-600" />} iconBg="bg-yellow-50" />
+          <StatCard title="Tokens entrada" value={aiUsage ? aiUsage.totals.inputTokens.toLocaleString('pt-BR') : '—'} icon={<TrendingUp size={18} className="text-blue-600" />} iconBg="bg-blue-50" />
+          <StatCard title="Custo estimado" value={aiUsage ? `$${aiUsage.totals.costUsd.toFixed(4)}` : '—'} icon={<DollarSign size={18} className="text-green-600" />} iconBg="bg-green-50" />
         </div>
       )}
 

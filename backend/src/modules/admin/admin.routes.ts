@@ -94,85 +94,89 @@ export async function adminRoutes(app: FastifyInstance) {
     const now = new Date()
     const since = period === 'month' ? new Date(now.getFullYear(), now.getMonth(), 1) : new Date(0)
 
-    const [totalStats, byPlan, byUser, dailyUsage] = await Promise.all([
-      // Totais gerais
-      prisma.aiUsageLog.aggregate({
-        where: { createdAt: { gte: since } },
-        _sum: { inputTokens: true, outputTokens: true, totalTokens: true, costUsd: true },
-        _count: { id: true },
-      }),
+    try {
+      const [totalStats, byPlan, byUser] = await Promise.all([
+        prisma.aiUsageLog.aggregate({
+          where: { createdAt: { gte: since } },
+          _sum: { inputTokens: true, outputTokens: true, totalTokens: true, costUsd: true },
+          _count: { id: true },
+        }),
+        prisma.aiUsageLog.groupBy({
+          by: ['planSlug'],
+          where: { createdAt: { gte: since } },
+          _sum: { totalTokens: true, costUsd: true },
+          _count: { id: true },
+          orderBy: { _sum: { totalTokens: 'desc' } },
+        }),
+        prisma.aiUsageLog.groupBy({
+          by: ['userId'],
+          where: { createdAt: { gte: since } },
+          _sum: { totalTokens: true, costUsd: true },
+          _count: { id: true },
+          orderBy: { _sum: { totalTokens: 'desc' } },
+          take: 10,
+        }),
+      ])
 
-      // Agrupado por plano
-      prisma.aiUsageLog.groupBy({
-        by: ['planSlug'],
-        where: { createdAt: { gte: since } },
-        _sum: { totalTokens: true, costUsd: true },
-        _count: { id: true },
-        orderBy: { _sum: { totalTokens: 'desc' } },
-      }),
+      // Daily usage via raw SQL — fallback to [] on failure
+      let dailyUsage: { date: string; tokens: number; cost: number; count: number }[] = []
+      try {
+        const rows = await prisma.$queryRaw<{ date: string; tokens: bigint; cost: number; count: bigint }[]>`
+          SELECT
+            TO_CHAR(created_at, 'YYYY-MM-DD') AS date,
+            SUM(total_tokens)::bigint AS tokens,
+            SUM(cost_usd) AS cost,
+            COUNT(id)::bigint AS count
+          FROM ai_usage_logs
+          WHERE created_at >= ${since}
+          GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
+          ORDER BY date ASC
+        `
+        dailyUsage = rows.map(d => ({
+          date: d.date,
+          tokens: Number(d.tokens),
+          cost: +Number(d.cost).toFixed(4),
+          count: Number(d.count),
+        }))
+      } catch (_) { /* raw query failed — skip daily chart */ }
 
-      // Top usuários
-      prisma.aiUsageLog.groupBy({
-        by: ['userId'],
-        where: { createdAt: { gte: since } },
-        _sum: { totalTokens: true, costUsd: true },
-        _count: { id: true },
-        orderBy: { _sum: { totalTokens: 'desc' } },
-        take: 10,
-      }),
+      const userIds = byUser.map(u => u.userId)
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, email: true, profile: { select: { fullName: true } } },
+      })
+      const userMap = Object.fromEntries(users.map(u => [u.id, u]))
 
-      // Uso diário (últimos 30 dias)
-      prisma.$queryRaw<{ date: string; tokens: bigint; cost: number; count: bigint }[]>`
-        SELECT
-          DATE(created_at)::text AS date,
-          SUM(total_tokens) AS tokens,
-          SUM(cost_usd) AS cost,
-          COUNT(id) AS count
-        FROM ai_usage_logs
-        WHERE created_at >= ${since}
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-      `,
-    ])
-
-    // Enriquecer byUser com email
-    const userIds = byUser.map(u => u.userId)
-    const users = await prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, email: true, profile: { select: { fullName: true } } },
-    })
-    const userMap = Object.fromEntries(users.map(u => [u.id, u]))
-
-    return reply.send({
-      period,
-      totals: {
-        extractions: totalStats._count.id,
-        inputTokens: totalStats._sum.inputTokens ?? 0,
-        outputTokens: totalStats._sum.outputTokens ?? 0,
-        totalTokens: totalStats._sum.totalTokens ?? 0,
-        costUsd: +(totalStats._sum.costUsd ?? 0).toFixed(4),
-      },
-      byPlan: byPlan.map(p => ({
-        planSlug: p.planSlug ?? 'sem-plano',
-        extractions: p._count.id,
-        totalTokens: p._sum.totalTokens ?? 0,
-        costUsd: +(p._sum.costUsd ?? 0).toFixed(4),
-      })),
-      byUser: byUser.map(u => ({
-        userId: u.userId,
-        email: userMap[u.userId]?.email ?? '—',
-        name: userMap[u.userId]?.profile?.fullName ?? '—',
-        extractions: u._count.id,
-        totalTokens: u._sum.totalTokens ?? 0,
-        costUsd: +(u._sum.costUsd ?? 0).toFixed(4),
-      })),
-      daily: dailyUsage.map(d => ({
-        date: d.date,
-        tokens: Number(d.tokens),
-        cost: +Number(d.cost).toFixed(4),
-        count: Number(d.count),
-      })),
-    })
+      return reply.send({
+        period,
+        totals: {
+          extractions: totalStats._count.id,
+          inputTokens: totalStats._sum.inputTokens ?? 0,
+          outputTokens: totalStats._sum.outputTokens ?? 0,
+          totalTokens: totalStats._sum.totalTokens ?? 0,
+          costUsd: +(totalStats._sum.costUsd ?? 0).toFixed(4),
+        },
+        byPlan: byPlan.map(p => ({
+          planSlug: p.planSlug ?? 'sem-plano',
+          extractions: p._count.id,
+          totalTokens: p._sum.totalTokens ?? 0,
+          costUsd: +(p._sum.costUsd ?? 0).toFixed(4),
+        })),
+        byUser: byUser.map(u => ({
+          userId: u.userId,
+          email: userMap[u.userId]?.email ?? '—',
+          name: userMap[u.userId]?.profile?.fullName ?? '—',
+          extractions: u._count.id,
+          totalTokens: u._sum.totalTokens ?? 0,
+          costUsd: +(u._sum.costUsd ?? 0).toFixed(4),
+        })),
+        daily: dailyUsage,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao buscar uso de IA'
+      app.log.error({ err }, 'admin/ai-usage error')
+      return reply.status(500).send({ error: msg })
+    }
   })
 
   // GET /admin/ai-usage/by-unit - tokens agrupados por unidade consumidora
