@@ -76,17 +76,21 @@ export async function billsRoutes(app: FastifyInstance) {
       const ext = data.filename.split('.').pop() ?? 'bin'
       const fileName = `${Date.now()}.${ext}`
 
-      const file = await service.attachFile(billId, {
+      await service.attachFile(billId, {
         fileName,
         originalName: data.filename,
         mimeType: data.mimetype,
         fileSize: buffer.length,
-        filePath: cloudinaryUrl, // mantemos compatibilidade usando filePath para a URL
+        filePath: cloudinaryUrl,
         cloudinaryUrl,
         cloudinaryPublicId,
       })
 
-      return reply.status(201).send(file)
+      // Extrai com o buffer já em memória — evita re-download do Cloudinary
+      await service.extractWithAI(billId, sub, buffer, data.mimetype)
+
+      const updatedBill = await service.findById(billId, sub)
+      return reply.status(201).send(updatedBill)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao fazer upload.'
       return reply.status(400).send({ error: msg })

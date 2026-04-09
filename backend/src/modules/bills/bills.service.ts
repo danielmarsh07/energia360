@@ -227,8 +227,9 @@ export class BillsService {
 
   // =============================================
   // Extração real com Claude AI
+  // buffer opcional: se fornecido, usa direto (evita re-download do Cloudinary)
   // =============================================
-  async extractWithAI(billId: string, userId: string) {
+  async extractWithAI(billId: string, userId: string, inlineBuffer?: Buffer, inlineMimeType?: string) {
     const bill = await prisma.utilityBill.findUnique({
       where: { id: billId },
       include: { files: true },
@@ -236,7 +237,7 @@ export class BillsService {
     if (!bill) throw new Error('Conta não encontrada.')
 
     const file = bill.files[0]
-    if (!file) throw new Error('Nenhum arquivo encontrado. Faça o upload antes de extrair.')
+    if (!file && !inlineBuffer) throw new Error('Nenhum arquivo encontrado. Faça o upload antes de extrair.')
 
     // Verificar limite do plano
     const { planSlug, withinLimit } = await this.checkExtractionLimit(userId)
@@ -247,10 +248,8 @@ export class BillsService {
     await this.updateStatus(billId, BillStatus.PROCESSING)
 
     const model = env.AI_MODEL
-
-    // Obter a URL do arquivo
-    const fileUrl = file.cloudinaryUrl
-    if (!fileUrl) throw new Error('Arquivo não disponível no Cloudinary. Reenvie o arquivo.')
+    const mimeType = inlineMimeType ?? file?.mimeType ?? 'application/pdf'
+    const isPdf = mimeType === 'application/pdf'
 
     let inputTokens = 0
     let outputTokens = 0
@@ -258,16 +257,25 @@ export class BillsService {
     let errorMessage: string | undefined
 
     try {
-      const isPdf = file.mimeType === 'application/pdf'
-
-      // Montar o conteúdo para a API do Claude
-      // Imagens: URL direta (mais simples, sem download)
-      // PDFs: base64 obrigatório na API do Claude
       let messageContent: Anthropic.MessageParam['content']
 
       if (isPdf) {
-        const buffer = await downloadBuffer(fileUrl)
-        const base64 = buffer.toString('base64')
+        // PDFs precisam de base64 — usa buffer inline (upload recente) ou baixa do Cloudinary
+        let pdfBuffer: Buffer
+        if (inlineBuffer) {
+          pdfBuffer = inlineBuffer
+        } else {
+          const fileUrl = file?.cloudinaryUrl
+          if (!fileUrl) throw new Error('Arquivo não disponível. Reenvie o PDF.')
+          // Gera URL assinada do Cloudinary para evitar 401 em raw files
+          const signedUrl = cloudinary.utils.private_download_url(
+            file!.cloudinaryPublicId ?? fileUrl,
+            'pdf',
+            { resource_type: 'raw', attachment: false }
+          )
+          pdfBuffer = await downloadBuffer(signedUrl)
+        }
+        const base64 = pdfBuffer.toString('base64')
         messageContent = [
           {
             type: 'document',
@@ -276,13 +284,17 @@ export class BillsService {
           { type: 'text', text: EXTRACTION_PROMPT },
         ]
       } else {
+        // Imagens: URL direta do Cloudinary (sem download)
+        const fileUrl = inlineBuffer
+          ? `data:${mimeType};base64,${inlineBuffer.toString('base64')}`
+          : file?.cloudinaryUrl
+        if (!fileUrl) throw new Error('Arquivo não disponível. Reenvie a imagem.')
         messageContent = [
           {
             type: 'image',
-            source: {
-              type: 'url',
-              url: fileUrl,
-            },
+            source: inlineBuffer
+              ? { type: 'base64', media_type: mimeType as 'image/jpeg' | 'image/png', data: inlineBuffer.toString('base64') }
+              : { type: 'url', url: fileUrl },
           } as Anthropic.ImageBlockParam,
           { type: 'text', text: EXTRACTION_PROMPT },
         ]
