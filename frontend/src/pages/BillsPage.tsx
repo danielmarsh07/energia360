@@ -28,6 +28,7 @@ function UploadModal({ bill, onClose }: { bill: UtilityBill; onClose: () => void
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['reports'] })
       queryClient.invalidateQueries({ queryKey: ['history'] })
+      queryClient.invalidateQueries({ queryKey: ['addresses'] })
       toast.success('Conta enviada! Dados extraídos com sucesso.')
       onClose()
     },
@@ -185,6 +186,7 @@ export default function BillsPage() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['reports'] })
       queryClient.invalidateQueries({ queryKey: ['history'] })
+      queryClient.invalidateQueries({ queryKey: ['addresses'] })
       toast.success('Conta excluída.')
     },
     onError: (err) => toast.error(getApiError(err)),
