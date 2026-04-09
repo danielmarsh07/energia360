@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users, Building2, FileText, AlertTriangle, Clock, RefreshCw,
   UserCheck, UserX, Brain, Zap, DollarSign, TrendingUp, BarChart3,
+  MapPin, CheckCircle, XCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -63,6 +64,18 @@ export default function AdminPage() {
   const { data: plansQuota } = useQuery({
     queryKey: ['admin-ai-plans-quota'],
     queryFn: adminApi.aiUsagePlansQuota,
+    enabled: tab === 'ai',
+  })
+
+  const { data: byUnit } = useQuery({
+    queryKey: ['admin-ai-by-unit', aiPeriod],
+    queryFn: () => adminApi.aiUsageByUnit(aiPeriod),
+    enabled: tab === 'ai',
+  })
+
+  const { data: byBill } = useQuery({
+    queryKey: ['admin-ai-by-bill', aiPeriod],
+    queryFn: () => adminApi.aiUsageByBill(aiPeriod),
     enabled: tab === 'ai',
   })
 
@@ -377,6 +390,111 @@ export default function AdminPage() {
               </Card>
             )}
           </div>
+
+          {/* Por unidade */}
+          {byUnit && byUnit.length > 0 && (
+            <Card padding="none">
+              <div className="p-5 border-b border-gray-100 flex items-center gap-2">
+                <MapPin size={16} className="text-primary-600" />
+                <h3 className="section-title">Tokens por unidade consumidora</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Unidade</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Extrações</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Tokens</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Custo</th>
+                      <th className="px-5 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {byUnit.map((u: { unitId: string; unitName: string; clientName: string; extractions: number; totalTokens: number; costUsd: number }) => {
+                      const pct = byUnit[0]?.totalTokens ? Math.round((u.totalTokens / byUnit[0].totalTokens) * 100) : 0
+                      return (
+                        <tr key={u.unitId} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-5 py-3 font-medium flex items-center gap-2">
+                            <Building2 size={14} className="text-gray-400" />
+                            {u.unitName}
+                          </td>
+                          <td className="px-5 py-3 text-gray-500 text-xs">{u.clientName}</td>
+                          <td className="px-5 py-3 text-right">{u.extractions}</td>
+                          <td className="px-5 py-3 text-right font-mono text-xs">{u.totalTokens.toLocaleString('pt-BR')}</td>
+                          <td className="px-5 py-3 text-right font-mono text-xs">${u.costUsd.toFixed(4)}</td>
+                          <td className="px-5 py-3 w-32">
+                            <div className="w-full bg-gray-100 rounded-full h-1.5">
+                              <div className="bg-primary-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* Por conta */}
+          {byBill && byBill.length > 0 && (
+            <Card padding="none">
+              <div className="p-5 border-b border-gray-100 flex items-center gap-2">
+                <FileText size={16} className="text-blue-600" />
+                <h3 className="section-title">Detalhe por conta analisada</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Conta</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Unidade</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Modelo</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Entrada</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Saída</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Custo</th>
+                      <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Data</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {byBill.map((b: {
+                      logId: string; refMonth: number; refYear: number
+                      unitName: string; clientName: string; model: string
+                      inputTokens: number; outputTokens: number; totalTokens: number
+                      costUsd: number; success: boolean; createdAt: string
+                    }) => (
+                      <tr key={b.logId} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-3 font-medium">{formatMonthYear(b.refMonth, b.refYear)}</td>
+                        <td className="px-5 py-3 text-gray-600 text-xs">{b.unitName}</td>
+                        <td className="px-5 py-3 text-gray-500 text-xs">{b.clientName}</td>
+                        <td className="px-5 py-3">
+                          <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-mono">
+                            {b.model.replace('claude-', '').replace('-20251001', '')}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right font-mono text-xs text-gray-500">{b.inputTokens.toLocaleString('pt-BR')}</td>
+                        <td className="px-5 py-3 text-right font-mono text-xs text-gray-500">{b.outputTokens.toLocaleString('pt-BR')}</td>
+                        <td className="px-5 py-3 text-right font-mono text-xs font-semibold">{b.totalTokens.toLocaleString('pt-BR')}</td>
+                        <td className="px-5 py-3 text-right font-mono text-xs">${b.costUsd.toFixed(4)}</td>
+                        <td className="px-5 py-3 text-center">
+                          {b.success
+                            ? <CheckCircle size={15} className="text-green-500 mx-auto" />
+                            : <XCircle size={15} className="text-red-500 mx-auto" />}
+                        </td>
+                        <td className="px-5 py-3 text-gray-400 text-xs">
+                          {new Date(b.createdAt).toLocaleDateString('pt-BR')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
           {/* Quotas por plano */}
           {plansQuota && (

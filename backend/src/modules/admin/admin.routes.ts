@@ -157,6 +157,94 @@ export async function adminRoutes(app: FastifyInstance) {
     })
   })
 
+  // GET /admin/ai-usage/by-unit - tokens agrupados por unidade consumidora
+  app.get('/ai-usage/by-unit', async (req, reply) => {
+    const { period = 'month' } = req.query as { period?: 'month' | 'all' }
+    const now = new Date()
+    const since = period === 'month' ? new Date(now.getFullYear(), now.getMonth(), 1) : new Date(0)
+
+    const rows = await prisma.$queryRaw<{
+      unit_id: string; unit_name: string; client_name: string
+      extractions: bigint; total_tokens: bigint; cost_usd: number
+    }[]>`
+      SELECT
+        au.id            AS unit_id,
+        au.name          AS unit_name,
+        cp.full_name     AS client_name,
+        COUNT(al.id)     AS extractions,
+        SUM(al.total_tokens) AS total_tokens,
+        SUM(al.cost_usd)     AS cost_usd
+      FROM ai_usage_logs al
+      JOIN utility_bills ub ON al.bill_id = ub.id
+      JOIN address_units au ON ub.address_unit_id = au.id
+      JOIN client_profiles cp ON au.client_profile_id = cp.id
+      WHERE al.created_at >= ${since}
+      GROUP BY au.id, au.name, cp.full_name
+      ORDER BY total_tokens DESC
+    `
+
+    return reply.send(rows.map(r => ({
+      unitId: r.unit_id,
+      unitName: r.unit_name,
+      clientName: r.client_name,
+      extractions: Number(r.extractions),
+      totalTokens: Number(r.total_tokens),
+      costUsd: +Number(r.cost_usd).toFixed(4),
+    })))
+  })
+
+  // GET /admin/ai-usage/by-bill - detalhe de tokens por conta analisada
+  app.get('/ai-usage/by-bill', async (req, reply) => {
+    const { period = 'month' } = req.query as { period?: 'month' | 'all' }
+    const now = new Date()
+    const since = period === 'month' ? new Date(now.getFullYear(), now.getMonth(), 1) : new Date(0)
+
+    const rows = await prisma.$queryRaw<{
+      log_id: string; bill_id: string; ref_month: number; ref_year: number
+      unit_name: string; client_name: string; model: string
+      input_tokens: number; output_tokens: number; total_tokens: number
+      cost_usd: number; success: boolean; created_at: Date
+    }[]>`
+      SELECT
+        al.id            AS log_id,
+        al.bill_id,
+        ub.reference_month AS ref_month,
+        ub.reference_year  AS ref_year,
+        au.name            AS unit_name,
+        cp.full_name       AS client_name,
+        al.model,
+        al.input_tokens,
+        al.output_tokens,
+        al.total_tokens,
+        al.cost_usd,
+        al.success,
+        al.created_at
+      FROM ai_usage_logs al
+      JOIN utility_bills ub ON al.bill_id = ub.id
+      JOIN address_units au ON ub.address_unit_id = au.id
+      JOIN client_profiles cp ON au.client_profile_id = cp.id
+      WHERE al.created_at >= ${since}
+      ORDER BY al.created_at DESC
+      LIMIT 100
+    `
+
+    return reply.send(rows.map(r => ({
+      logId: r.log_id,
+      billId: r.bill_id,
+      refMonth: r.ref_month,
+      refYear: r.ref_year,
+      unitName: r.unit_name,
+      clientName: r.client_name,
+      model: r.model,
+      inputTokens: Number(r.input_tokens),
+      outputTokens: Number(r.output_tokens),
+      totalTokens: Number(r.total_tokens),
+      costUsd: +Number(r.cost_usd).toFixed(4),
+      success: r.success,
+      createdAt: r.created_at,
+    })))
+  })
+
   // GET /admin/ai-usage/plans-quota - limites e uso por plano este mês
   app.get('/ai-usage/plans-quota', async (_req, reply) => {
     const now = new Date()

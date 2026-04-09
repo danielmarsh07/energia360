@@ -163,4 +163,8 @@ export const adminApi = {
   aiUsage: (period?: 'month' | 'all') =>
     api.get('/admin/ai-usage', { params: { period } }).then(r => r.data),
   aiUsagePlansQuota: () => api.get('/admin/ai-usage/plans-quota').then(r => r.data),
+  aiUsageByUnit: (period?: 'month' | 'all') =>
+    api.get('/admin/ai-usage/by-unit', { params: { period } }).then(r => r.data),
+  aiUsageByBill: (period?: 'month' | 'all') =>
+    api.get('/admin/ai-usage/by-bill', { params: { period } }).then(r => r.data),
 }
