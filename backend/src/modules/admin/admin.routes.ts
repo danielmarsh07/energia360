@@ -4,6 +4,24 @@ import { authenticate } from '../../shared/middleware/authenticate'
 import { requireAdmin } from '../../shared/middleware/requireAdmin'
 
 export async function adminRoutes(app: FastifyInstance) {
+
+  // POST /admin/bootstrap - promove email para ADMIN_MASTER (protegido por chave)
+  app.post('/bootstrap', async (req, reply) => {
+    const { email, key } = req.body as { email?: string; key?: string }
+    const bootstrapKey = process.env.BOOTSTRAP_KEY
+    if (!bootstrapKey || key !== bootstrapKey) {
+      return reply.status(403).send({ error: 'Chave inválida.' })
+    }
+    if (!email) return reply.status(400).send({ error: 'E-mail obrigatório.' })
+    const user = await prisma.user.update({
+      where: { email },
+      data: { role: 'ADMIN_MASTER' },
+      select: { id: true, email: true, role: true },
+    }).catch(() => null)
+    if (!user) return reply.status(404).send({ error: 'Usuário não encontrado.' })
+    return reply.send({ message: `${email} promovido para ADMIN_MASTER.`, user })
+  })
+
   app.addHook('preHandler', authenticate)
   app.addHook('preHandler', requireAdmin)
 
@@ -285,6 +303,33 @@ export async function adminRoutes(app: FastifyInstance) {
     }))
 
     return reply.send(result)
+  })
+
+  // GET /admin/clients/:userId/units - unidades + contas de um cliente
+  app.get('/clients/:userId/units', async (req, reply) => {
+    const { userId } = req.params as { userId: string }
+    const profile = await prisma.clientProfile.findUnique({
+      where: { userId },
+      include: {
+        addressUnits: {
+          where: { isActive: true },
+          include: {
+            _count: { select: { utilityBills: true } },
+            utilityBills: {
+              orderBy: [{ referenceYear: 'desc' }, { referenceMonth: 'desc' }],
+              take: 12,
+              include: {
+                extractedData: {
+                  select: { totalAmount: true, consumptionKwh: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+    if (!profile) return reply.send([])
+    return reply.send(profile.addressUnits)
   })
 
   // GET /admin/bills - Lista uploads recentes com status

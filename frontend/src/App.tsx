@@ -4,6 +4,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { Toaster } from 'react-hot-toast'
 
 import { AppLayout } from '@/components/layout/AppLayout'
+import { AdminLayout } from '@/components/layout/AdminLayout'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 
 // Páginas públicas
@@ -20,8 +21,12 @@ import ReportsPage from '@/pages/ReportsPage'
 import AlertsPage from '@/pages/AlertsPage'
 import TutorialsPage from '@/pages/TutorialsPage'
 import ProfilePage from '@/pages/ProfilePage'
-import AdminPage from '@/pages/AdminPage'
 import PlansPage from '@/pages/PlansPage'
+
+// Páginas admin
+import AdminOverviewPage from '@/pages/admin/AdminOverviewPage'
+import AdminClientsPage from '@/pages/admin/AdminClientsPage'
+import AdminAiPage from '@/pages/admin/AdminAiPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,11 +61,15 @@ export default function App() {
               <Route path="/dicas/:slug" element={<TutorialsPage />} />
               <Route path="/perfil" element={<ProfilePage />} />
               <Route path="/planos" element={<PlansPage />} />
+            </Route>
+          </Route>
 
-              {/* Rota de admin */}
-              <Route element={<ProtectedRoute adminOnly />}>
-                <Route path="/admin" element={<AdminPage />} />
-              </Route>
+          {/* Rotas admin — layout separado */}
+          <Route element={<ProtectedRoute adminOnly />}>
+            <Route element={<AdminLayout />}>
+              <Route path="/admin" element={<AdminOverviewPage />} />
+              <Route path="/admin/clientes" element={<AdminClientsPage />} />
+              <Route path="/admin/ia" element={<AdminAiPage />} />
             </Route>
           </Route>
 

@@ -30,7 +30,8 @@ export default function LoginPage() {
       const res = await authApi.login(data)
       setAuth(res.user, res.token)
       toast.success(`Bem-vindo de volta, ${res.user.fullName?.split(' ')[0]}! 🌱`)
-      navigate('/dashboard')
+      const isAdmin = res.user.role === 'ADMIN' || res.user.role === 'ADMIN_MASTER'
+      navigate(isAdmin ? '/admin' : '/dashboard')
     } catch (err) {
       toast.error(getApiError(err))
     }
