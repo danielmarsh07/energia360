@@ -186,10 +186,29 @@ export class BillsService {
   }
 
   async saveExtractedData(billId: string, data: Record<string, unknown>) {
+    // Sanitiza campos antes de salvar — converte datas string para Date e remove campos desconhecidos
+    const knownFields = [
+      'utilityName','consumerUnitCode','referenceMonthStr',
+      'previousReading','currentReading','consumptionKwh',
+      'injectedEnergyKwh','energyCreditsKwh','totalAmount',
+      'energyAmount','networkUsageFee','avgConsumption',
+      'dueDate','readingDate','isManuallyReviewed','confidence','rawJson',
+    ]
+    const sanitized: Record<string, unknown> = {}
+    for (const key of knownFields) {
+      if (!(key in data)) continue
+      const val = data[key]
+      if ((key === 'dueDate' || key === 'readingDate') && typeof val === 'string') {
+        sanitized[key] = val ? new Date(val) : null
+      } else {
+        sanitized[key] = val ?? null
+      }
+    }
+
     return prisma.utilityBillExtractedData.upsert({
       where: { billId },
-      create: { billId, ...data },
-      update: { ...data, updatedAt: new Date() },
+      create: { billId, ...sanitized },
+      update: { ...sanitized, updatedAt: new Date() },
     })
   }
 
