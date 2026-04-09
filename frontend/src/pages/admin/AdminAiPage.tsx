@@ -63,6 +63,60 @@ export default function AdminAiPage() {
         </div>
       )}
 
+      {/* Tokens por unidade — gráfico + tabela */}
+      {byUnit && byUnit.length > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin size={16} className="text-primary-600" />
+            <h3 className="section-title">Tokens por unidade consumidora</h3>
+          </div>
+          <div className="h-56 mb-6">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byUnit.slice(0, 12)} layout="vertical" margin={{ left: 8, right: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                <YAxis type="category" dataKey="unitName" tick={{ fontSize: 11 }} width={120} />
+                <Tooltip
+                  formatter={(v: number) => [v.toLocaleString('pt-BR'), 'Tokens']}
+                  labelFormatter={(l: string) => {
+                    const unit = byUnit.find((u: { unitName: string; clientName: string }) => u.unitName === l)
+                    return unit ? `${l} · ${unit.clientName}` : l
+                  }}
+                />
+                <Bar dataKey="totalTokens" fill="#16a34a" radius={[0, 3, 3, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {byUnit.map((u: { unitId: string; unitName: string; clientName: string; extractions: number; totalTokens: number; costUsd: number }, idx: number) => {
+              const maxTokens = byUnit[0]?.totalTokens ?? 1
+              const pct = Math.round((u.totalTokens / maxTokens) * 100)
+              return (
+                <div key={u.unitId} className="flex items-center gap-4 py-3">
+                  <span className="text-xs text-gray-400 w-4 shrink-0">{idx + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Building2 size={13} className="text-gray-400 shrink-0" />
+                        <span className="text-sm font-medium truncate">{u.unitName}</span>
+                        <span className="text-xs text-gray-400 truncate hidden sm:block">· {u.clientName}</span>
+                      </div>
+                      <div className="text-right shrink-0 ml-4">
+                        <span className="text-sm font-semibold">{u.totalTokens.toLocaleString('pt-BR')}</span>
+                        <span className="text-xs text-gray-400 ml-2">{u.extractions} ext. · ${u.costUsd.toFixed(4)}</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-1.5">
+                      <div className="bg-primary-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Gráfico diário */}
       {aiUsage?.daily?.length > 0 && (
         <Card>
@@ -124,49 +178,6 @@ export default function AdminAiPage() {
           </Card>
         )}
       </div>
-
-      {/* Por unidade */}
-      {byUnit && byUnit.length > 0 && (
-        <Card padding="none">
-          <div className="p-5 border-b border-gray-100 flex items-center gap-2">
-            <MapPin size={16} className="text-primary-600" />
-            <h3 className="section-title">Por unidade consumidora</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Unidade</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Extrações</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Tokens</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Custo</th>
-                  <th className="px-5 py-3 w-28"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {byUnit.map((u: { unitId: string; unitName: string; clientName: string; extractions: number; totalTokens: number; costUsd: number }) => {
-                  const pct = byUnit[0]?.totalTokens ? Math.round((u.totalTokens / byUnit[0].totalTokens) * 100) : 0
-                  return (
-                    <tr key={u.unitId} className="hover:bg-gray-50">
-                      <td className="px-5 py-3 font-medium flex items-center gap-2"><Building2 size={13} className="text-gray-400" />{u.unitName}</td>
-                      <td className="px-5 py-3 text-gray-500 text-xs">{u.clientName}</td>
-                      <td className="px-5 py-3 text-right">{u.extractions}</td>
-                      <td className="px-5 py-3 text-right font-mono text-xs">{u.totalTokens.toLocaleString('pt-BR')}</td>
-                      <td className="px-5 py-3 text-right font-mono text-xs">${u.costUsd.toFixed(4)}</td>
-                      <td className="px-5 py-3">
-                        <div className="w-full bg-gray-100 rounded-full h-1.5">
-                          <div className="bg-primary-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
 
       {/* Por conta */}
       {byBill && byBill.length > 0 && (
