@@ -123,7 +123,7 @@ export async function billsRoutes(app: FastifyInstance) {
     }
   })
 
-  // DELETE /bills/:billId - Exclui uma conta e seus arquivos
+  // DELETE /bills/:billId - Exclui conta, arquivos e histórico de consumo
   app.delete('/:billId', async (req, reply) => {
     const { sub } = req.user as { sub: string }
     const { billId } = req.params as { billId: string }
@@ -133,6 +133,14 @@ export async function billsRoutes(app: FastifyInstance) {
       for (const file of bill.files) {
         await service.deleteFile(file.id, sub).catch(() => null)
       }
+      // Remove histórico de consumo do mês correspondente
+      await prisma.consumptionHistory.deleteMany({
+        where: {
+          addressUnitId: bill.addressUnitId,
+          month: bill.referenceMonth,
+          year: bill.referenceYear,
+        },
+      })
       await prisma.utilityBill.delete({ where: { id: billId } })
       return reply.send({ message: 'Conta excluída.' })
     } catch (err: unknown) {

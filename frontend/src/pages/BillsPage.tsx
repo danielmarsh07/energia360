@@ -25,6 +25,9 @@ function UploadModal({ bill, onClose }: { bill: UtilityBill; onClose: () => void
     mutationFn: (f: File) => billsApi.upload(bill.id, f),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bills'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['reports'] })
+      queryClient.invalidateQueries({ queryKey: ['history'] })
       toast.success('Conta enviada! Dados extraídos com sucesso.')
       onClose()
     },
@@ -179,6 +182,9 @@ export default function BillsPage() {
     mutationFn: (billId: string) => billsApi.delete(billId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bills'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['reports'] })
+      queryClient.invalidateQueries({ queryKey: ['history'] })
       toast.success('Conta excluída.')
     },
     onError: (err) => toast.error(getApiError(err)),
