@@ -22,10 +22,7 @@ function UploadModal({ bill, onClose }: { bill: UtilityBill; onClose: () => void
   const queryClient = useQueryClient()
 
   const uploadMutation = useMutation({
-    mutationFn: async (f: File) => {
-      await billsApi.upload(bill.id, f)
-      await billsApi.extract(bill.id)
-    },
+    mutationFn: (f: File) => billsApi.upload(bill.id, f),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bills'] })
       toast.success('Conta enviada! Dados extraídos com sucesso.')
