@@ -155,6 +155,8 @@ export class BillsService {
           folder: `energia360/bills/${billId}`,
           public_id: `${Date.now()}.${ext}`,
           resource_type: resourceType,
+          access_mode: 'public',
+          type: 'upload',
         },
         (error, result) => {
           if (error || !result) return reject(error ?? new Error('Cloudinary upload falhou.'))
