@@ -36,6 +36,30 @@ function calcCost(model: string, inputTokens: number, outputTokens: number): num
 // Prompt v2 importado de extraction-prompt.ts
 
 // =============================================
+// Heurística de fallback: quando re-extrair com Sonnet?
+// =============================================
+/**
+ * Retorna true quando o JSON extraído tem indicadores de baixa qualidade
+ * e vale a pena re-tentar com um modelo mais forte (Sonnet).
+ */
+function shouldFallback(v2: ExtractedBillV2): boolean {
+  // Confiança auto-declarada baixa
+  if ((v2.meta?.confidence ?? 1) < 0.85) return true
+
+  // Se é GD, exigimos campos críticos preenchidos
+  if (v2.unit?.isDistributedGeneration) {
+    const icmsMissing =
+      v2.taxes?.icms?.baseTotal == null && v2.taxes?.icms?.valueTotal == null
+    const injectedMissing = v2.scee?.injected?.totalKwh == null
+    const tooFewLines = (v2.lineItems?.length ?? 0) < 3
+
+    if (icmsMissing || injectedMissing || tooFewLines) return true
+  }
+
+  return false
+}
+
+// =============================================
 // Helper: download de URL para buffer (com redirect)
 // =============================================
 async function downloadBuffer(url: string): Promise<Buffer> {
@@ -350,7 +374,6 @@ export class BillsService {
 
     let inputTokens = 0
     let outputTokens = 0
-    let success = true
     let errorMessage: string | undefined
 
     try {
@@ -397,26 +420,73 @@ export class BillsService {
         ]
       }
 
-      const response = await anthropic.messages.create({
-        model,
-        max_tokens: 8192,
-        messages: [{ role: 'user', content: messageContent }],
+      // Primeira passada com o modelo padrão (Haiku por default)
+      const primary = await this.callExtractionModel(model, messageContent)
+      inputTokens += primary.inputTokens
+      outputTokens += primary.outputTokens
+
+      // Log da primeira chamada (contabiliza na cota do plano)
+      await prisma.aiUsageLog.create({
+        data: {
+          userId, billId, model,
+          inputTokens: primary.inputTokens,
+          outputTokens: primary.outputTokens,
+          totalTokens: primary.inputTokens + primary.outputTokens,
+          costUsd: calcCost(model, primary.inputTokens, primary.outputTokens),
+          action: 'bill_extraction',
+          planSlug,
+          success: primary.v2 !== null,
+          errorMessage: primary.v2 === null ? 'JSON inválido' : undefined,
+        },
       })
 
-      inputTokens = response.usage.input_tokens
-      outputTokens = response.usage.output_tokens
+      // Decide se precisa de fallback (Sonnet) para melhorar qualidade
+      const fallbackModel = env.AI_MODEL_FALLBACK
+      const needsFallback =
+        fallbackModel && fallbackModel !== model &&
+        (primary.v2 === null || shouldFallback(primary.v2))
 
-      // Parsear o JSON v2 retornado pelo Claude
-      const rawText = response.content[0].type === 'text' ? response.content[0].text : ''
-      const v2 = parseExtractionResponse(rawText)
-      if (!v2) throw new Error('Resposta da IA não contém JSON válido.')
+      let finalV2 = primary.v2
+      let finalRawText = primary.rawText
+      let finalModel = model
+
+      if (needsFallback) {
+        const fallback = await this.callExtractionModel(fallbackModel!, messageContent)
+        inputTokens += fallback.inputTokens
+        outputTokens += fallback.outputTokens
+
+        // Log do fallback com action distinta (NÃO conta na cota do plano)
+        await prisma.aiUsageLog.create({
+          data: {
+            userId, billId, model: fallbackModel!,
+            inputTokens: fallback.inputTokens,
+            outputTokens: fallback.outputTokens,
+            totalTokens: fallback.inputTokens + fallback.outputTokens,
+            costUsd: calcCost(fallbackModel!, fallback.inputTokens, fallback.outputTokens),
+            action: 'bill_extraction_fallback',
+            planSlug,
+            success: fallback.v2 !== null,
+            errorMessage: fallback.v2 === null ? 'JSON inválido no fallback' : undefined,
+          },
+        })
+
+        if (fallback.v2) {
+          finalV2 = fallback.v2
+          finalRawText = fallback.rawText
+          finalModel = fallbackModel!
+        }
+      }
+
+      if (!finalV2) throw new Error('Extração falhou: nenhum modelo retornou JSON válido.')
 
       // Mapeia v2 completo → campos escalares + filhos + salva em transação
-      const mapped = mapV2ToSchema(v2, model)
+      const mapped = mapV2ToSchema(finalV2, finalModel)
       await this.saveFullV2Extraction(billId, mapped, {
-        model,
-        v2,
-        rawText,
+        model: finalModel,
+        fallbackUsed: needsFallback,
+        primaryModel: model,
+        v2: finalV2,
+        rawText: finalRawText,
         extractedAt: new Date().toISOString(),
       })
 
@@ -458,29 +528,11 @@ export class BillsService {
         })
       }
 
-      // Registrar log de uso
-      await prisma.aiUsageLog.create({
-        data: {
-          userId,
-          billId,
-          model,
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-          costUsd: calcCost(model, inputTokens, outputTokens),
-          action: 'bill_extraction',
-          planSlug,
-          success: true,
-        },
-      })
-
-      return v2
+      return finalV2
 
     } catch (err) {
-      success = false
       errorMessage = err instanceof Error ? err.message : 'Erro desconhecido'
-
-      // Log mesmo em caso de falha (para auditoria)
+      // Nota: logs por chamada já foram inseridos acima; aqui só registramos o erro agregado.
       await prisma.aiUsageLog.create({
         data: {
           userId,
@@ -490,15 +542,37 @@ export class BillsService {
           outputTokens,
           totalTokens: inputTokens + outputTokens,
           costUsd: calcCost(model, inputTokens, outputTokens),
-          action: 'bill_extraction',
+          action: 'bill_extraction_error',
           planSlug,
-          success,
+          success: false,
           errorMessage,
         },
       })
 
       await this.updateStatus(billId, BillStatus.FAILED)
       throw new Error(errorMessage)
+    }
+  }
+
+  /**
+   * Uma chamada Anthropic: retorna v2 parseado + tokens. Falhas de parsing
+   * devolvem v2=null em vez de throw (pra permitir fallback na chamada seguinte).
+   */
+  private async callExtractionModel(
+    model: string,
+    messageContent: Anthropic.MessageParam['content'],
+  ): Promise<{ v2: ExtractedBillV2 | null; rawText: string; inputTokens: number; outputTokens: number }> {
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: 8192,
+      messages: [{ role: 'user', content: messageContent }],
+    })
+    const rawText = response.content[0].type === 'text' ? response.content[0].text : ''
+    return {
+      v2: parseExtractionResponse(rawText),
+      rawText,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
     }
   }
 
@@ -520,20 +594,179 @@ export class BillsService {
    * Não chama a API Anthropic — só processamento local. Se a conta ainda não
    * tiver extração v2 (bills antigas), retorna INSUFFICIENT_DATA.
    */
-  async auditExtracted(billId: string, userId: string): Promise<AuditReport> {
+  async auditExtracted(
+    billId: string,
+    userId: string,
+    opts?: { forceReaudit?: boolean },
+  ): Promise<AuditReport & { cached: boolean; auditedAt: string | null; canReaudit: boolean }> {
     const bill = await this.findById(billId, userId)
-    const raw = bill.extractedData?.rawJson as { v2?: ExtractedBillV2 } | null
-    const v2 = raw?.v2 ?? null
+    const extractedData = bill.extractedData
 
+    // Descobre se o plano permite re-auditar
+    const subscription = await prisma.subscription.findUnique({
+      where: { userId },
+      include: { plan: true },
+    })
+    const canReaudit = subscription?.plan.allowBillReaudit ?? false
+
+    // Cache: se já auditamos e (a) o cliente não pediu explicitamente refazer
+    // ou (b) o plano não permite refazer, devolvemos o resultado salvo.
+    const hasCache = extractedData?.auditJson != null
+    const shouldUseCache = hasCache && (!opts?.forceReaudit || !canReaudit)
+    if (shouldUseCache && extractedData?.auditJson) {
+      const cached = extractedData.auditJson as unknown as AuditReport
+      return {
+        ...cached,
+        cached: true,
+        auditedAt: extractedData.auditedAt?.toISOString() ?? null,
+        canReaudit,
+      }
+    }
+
+    // Precisa rodar a auditoria — exige JSON v2
+    const raw = extractedData?.rawJson as { v2?: ExtractedBillV2 } | null
+    const v2 = raw?.v2 ?? null
     if (!v2) {
       throw new Error(
         'Esta conta foi extraída com o formato antigo. Reenvie o arquivo (botão "Reenviar") para habilitar a auditoria.'
       )
     }
 
-    const utility = bill.extractedData?.utilityName ?? 'Conta'
+    // Enriquece com dados de cadastro que a conta pode não trazer
+    if (v2.scee && v2.scee.installedCapacityKwp == null) {
+      const point = await prisma.energyPoint.findFirst({
+        where: { addressUnitId: bill.addressUnitId, hasSolar: true, isActive: true, solarPowerKwp: { not: null } },
+        orderBy: { installDate: 'desc' },
+      })
+      if (point?.solarPowerKwp) v2.scee.installedCapacityKwp = point.solarPowerKwp
+    }
+    if (v2.holder && !v2.holder.state) {
+      v2.holder.state = bill.addressUnit?.state ?? null
+    }
+
+    const utility = extractedData?.utilityName ?? 'Conta'
     const ref = `${utility} ${bill.referenceMonth}/${bill.referenceYear}`
-    return auditBill(v2, ref)
+    const report = auditBill(v2, ref)
+
+    // Persiste o relatório pra próximas visualizações
+    if (extractedData) {
+      await prisma.utilityBillExtractedData.update({
+        where: { id: extractedData.id },
+        data: {
+          auditJson: report as unknown as Prisma.InputJsonValue,
+          auditedAt: new Date(),
+          auditVersion: 'v1.2', // atualizar quando regras mudarem significativamente
+        },
+      })
+    }
+
+    return { ...report, cached: false, auditedAt: new Date().toISOString(), canReaudit }
+  }
+
+  /**
+   * Agrega auditorias de TODAS as contas do cliente nos últimos N meses.
+   * Roda o mesmo motor de regras em memória (zero chamada à IA).
+   */
+  async auditSummary(userId: string, months: number = 12) {
+    const profile = await prisma.clientProfile.findUnique({ where: { userId } })
+    if (!profile) throw new Error('Perfil não encontrado.')
+
+    const since = new Date()
+    since.setMonth(since.getMonth() - months)
+
+    const bills = await prisma.utilityBill.findMany({
+      where: {
+        addressUnit: { clientProfileId: profile.id },
+        createdAt: { gte: since },
+        extractedData: { isNot: null },
+      },
+      include: { extractedData: true, addressUnit: true },
+      orderBy: [{ referenceYear: 'desc' }, { referenceMonth: 'desc' }],
+    })
+
+    type Finding = AuditReport['findings'][number]
+    const perBill: Array<{
+      billId: string
+      ref: string
+      unitName: string
+      unitId: string
+      monthlyOvercharge: number
+      yearlyProjection: number
+      criticalCount: number
+      warningCount: number
+      findings: Finding[]
+    }> = []
+    const totalsByRule: Record<string, { ruleName: string; monthly: number; yearly: number; count: number }> = {}
+    let grandMonthly = 0
+    let grandYearly = 0
+    let billsWithOvercharge = 0
+    let billsAudited = 0
+
+    for (const b of bills) {
+      const raw = b.extractedData?.rawJson as { v2?: ExtractedBillV2 } | null
+      const v2 = raw?.v2
+      if (!v2) continue
+      billsAudited++
+
+      // Enriquece com kWp cadastrado se a conta não trouxer
+      if (v2.scee && v2.scee.installedCapacityKwp == null) {
+        const point = await prisma.energyPoint.findFirst({
+          where: { addressUnitId: b.addressUnitId, hasSolar: true, isActive: true, solarPowerKwp: { not: null } },
+          orderBy: { installDate: 'desc' },
+        })
+        if (point?.solarPowerKwp) v2.scee.installedCapacityKwp = point.solarPowerKwp
+      }
+      if (v2.holder && !v2.holder.state) v2.holder.state = b.addressUnit?.state ?? null
+
+      const utility = b.extractedData?.utilityName ?? 'Conta'
+      const ref = `${utility} ${b.referenceMonth}/${b.referenceYear}`
+      const report = auditBill(v2, ref)
+
+      const critical = report.findings.filter((f) => f.severity === 'CRITICAL' && f.status === 'OVERCHARGE_DETECTED').length
+      const warning = report.findings.filter((f) => f.severity === 'WARNING' && f.status === 'OVERCHARGE_DETECTED').length
+
+      if (report.totalMonthlyOvercharge > 0) billsWithOvercharge++
+      grandMonthly += report.totalMonthlyOvercharge
+      grandYearly += report.totalYearlyProjection
+
+      for (const f of report.findings) {
+        if (f.status !== 'OVERCHARGE_DETECTED') continue
+        if (!totalsByRule[f.ruleId]) {
+          totalsByRule[f.ruleId] = { ruleName: f.ruleName, monthly: 0, yearly: 0, count: 0 }
+        }
+        totalsByRule[f.ruleId].monthly += f.monthlyOverchargeAmount
+        totalsByRule[f.ruleId].yearly += f.yearlyProjection
+        totalsByRule[f.ruleId].count += 1
+      }
+
+      perBill.push({
+        billId: b.id,
+        ref: `${b.referenceMonth}/${b.referenceYear}`,
+        unitName: b.addressUnit?.name ?? '',
+        unitId: b.addressUnitId,
+        monthlyOvercharge: report.totalMonthlyOvercharge,
+        yearlyProjection: report.totalYearlyProjection,
+        criticalCount: critical,
+        warningCount: warning,
+        findings: report.findings,
+      })
+    }
+
+    return {
+      periodMonths: months,
+      billsAudited,
+      billsWithOvercharge,
+      totalMonthlyOvercharge: +grandMonthly.toFixed(2),
+      totalYearlyProjection: +grandYearly.toFixed(2),
+      byRule: Object.entries(totalsByRule).map(([ruleId, agg]) => ({
+        ruleId,
+        ruleName: agg.ruleName,
+        monthly: +agg.monthly.toFixed(2),
+        yearly: +agg.yearly.toFixed(2),
+        occurrences: agg.count,
+      })).sort((a, b) => b.yearly - a.yearly),
+      perBill: perBill.filter((p) => p.monthlyOvercharge > 0).slice(0, 20),
+    }
   }
 
   async getHistory(unitId: string, userId: string) {

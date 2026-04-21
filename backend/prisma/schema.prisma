@@ -360,6 +360,11 @@ model UtilityBillExtractedData {
   confidence         Float?
   rawJson            Json? // JSON v2 completo + texto bruto
 
+  // Cache da auditoria — evita reprocessar; Premium pode refazer
+  auditJson          Json?
+  auditedAt          DateTime?
+  auditVersion       String? // versão do motor que gerou o relatório (ex: "v1.2")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -627,6 +632,7 @@ model Plan {
   maxUnits              Int      @default(1)
   maxUsers              Int      @default(1)
   aiExtractionsPerMonth Int? // null = ilimitado
+  allowBillReaudit      Boolean  @default(false) // true = pode rodar auditoria mais de uma vez por conta
   isActive              Boolean  @default(true)
   order                 Int      @default(0)
 

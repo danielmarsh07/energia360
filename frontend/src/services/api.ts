@@ -113,7 +113,43 @@ export const billsApi = {
     api.get(`/bills/unit/${unitId}/history`).then(r => r.data),
   delete: (billId: string) => api.delete(`/bills/${billId}`).then(r => r.data),
   audit: (billId: string) =>
-    api.post<AuditReport>(`/bills/${billId}/audit`).then(r => r.data),
+    api.get<AuditReportWithMeta>(`/bills/${billId}/audit`).then(r => r.data),
+  auditForce: (billId: string) =>
+    api.post<AuditReportWithMeta & { message?: string }>(`/bills/${billId}/audit`).then(r => r.data),
+  auditSummary: (months: number = 12) =>
+    api.get<AuditSummary>(`/bills/audit/summary`, { params: { months } }).then(r => r.data),
+}
+
+export interface AuditReportWithMeta extends AuditReport {
+  cached: boolean
+  auditedAt: string | null
+  canReaudit: boolean
+}
+
+export interface AuditSummary {
+  periodMonths: number
+  billsAudited: number
+  billsWithOvercharge: number
+  totalMonthlyOvercharge: number
+  totalYearlyProjection: number
+  byRule: Array<{
+    ruleId: string
+    ruleName: string
+    monthly: number
+    yearly: number
+    occurrences: number
+  }>
+  perBill: Array<{
+    billId: string
+    ref: string
+    unitName: string
+    unitId: string
+    monthlyOvercharge: number
+    yearlyProjection: number
+    criticalCount: number
+    warningCount: number
+    findings: AuditFinding[]
+  }>
 }
 
 // =============================================

@@ -1,5 +1,9 @@
 import type { AuditReport, ExtractedBillV2 } from './types'
 import { auditIcmsOnInjection } from './rules/icms-on-injection'
+import { auditFioBPercentage } from './rules/fio-b-percentage'
+import { auditGenerationVsCapacity } from './rules/generation-vs-capacity'
+import { auditPisCofinsRefund } from './rules/pis-cofins-refund'
+import { auditCreditsExpiring } from './rules/credits-expiring'
 
 export * from './types'
 
@@ -11,11 +15,10 @@ export * from './types'
 export function auditBill(bill: ExtractedBillV2, billRef: string): AuditReport {
   const findings = [
     auditIcmsOnInjection(bill),
-    // próximas regras entram aqui:
-    // auditFioBPercentage(bill),
-    // auditFlagOnCompensated(bill),
-    // auditGenerationVsCapacity(bill),
-    // ...
+    auditFioBPercentage(bill),
+    auditGenerationVsCapacity(bill),
+    auditPisCofinsRefund(bill),
+    auditCreditsExpiring(bill),
   ]
 
   const totalMonthlyOvercharge = +findings

@@ -8,7 +8,8 @@ import {
   Plus, ChevronRight, AlertTriangle, Info, Sun
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { dashboardApi } from '@/services/api'
+import { dashboardApi, billsApi, type AuditSummary } from '@/services/api'
+import { Shield, TrendingUp } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { StatCard } from '@/components/ui/StatCard'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -54,6 +55,12 @@ export default function DashboardPage() {
     queryFn: dashboardApi.get,
   })
 
+  const { data: audit } = useQuery<AuditSummary>({
+    queryKey: ['audit-summary'],
+    queryFn: () => billsApi.auditSummary(12),
+    staleTime: 5 * 60 * 1000, // cache 5 min — cálculo pesa em contas com muitos registros
+  })
+
   const chartData = (data?.monthlyHistory || []).slice(-12).map((m: MonthlyHistoryItem) => ({
     name: `${MONTHS_PT[m.month - 1]}/${String(m.year).slice(2)}`,
     'Consumo (kWh)': m.consumption,
@@ -93,6 +100,72 @@ export default function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      {/* Auditoria consolidada — destaque quando há cobrança indevida */}
+      {audit && audit.billsAudited > 0 && audit.totalYearlyProjection > 0 && (
+        <div className="rounded-2xl bg-gradient-to-br from-red-500 via-rose-600 to-amber-600 text-white p-5 shadow-lg">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur">
+                <Shield size={24} />
+              </div>
+              <div>
+                <p className="text-sm opacity-90">Auditoria dos últimos {audit.periodMonths} meses</p>
+                <h2 className="text-2xl font-bold leading-tight">
+                  Detectamos {formatCurrency(audit.totalYearlyProjection)} de cobrança indevida/ano
+                </h2>
+                <p className="text-sm opacity-90 mt-1">
+                  {audit.billsWithOvercharge} de {audit.billsAudited} contas analisadas têm algum erro recuperável
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {audit.byRule.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-5">
+              {audit.byRule.slice(0, 3).map((r) => (
+                <div key={r.ruleId} className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/20">
+                  <p className="text-xs opacity-90">{r.ruleName}</p>
+                  <p className="text-lg font-bold mt-0.5">{formatCurrency(r.yearly)}<span className="text-xs opacity-80">/ano</span></p>
+                  <p className="text-xs opacity-80 mt-0.5">{r.occurrences} ocorrência{r.occurrences > 1 ? 's' : ''}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {audit.perBill.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-90 mb-2 flex items-center gap-1">
+                <TrendingUp size={12} /> Contas com mais cobrança indevida
+              </p>
+              <div className="space-y-1.5">
+                {audit.perBill.slice(0, 3).map((b) => (
+                  <Link
+                    key={b.billId}
+                    to={`/contas/${b.billId}`}
+                    className="flex items-center justify-between bg-white/10 hover:bg-white/20 transition rounded-lg px-3 py-2 text-sm"
+                  >
+                    <span>{b.unitName} · {b.ref}</span>
+                    <span className="font-bold">{formatCurrency(b.monthlyOvercharge)}/mês</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {audit && audit.billsAudited > 0 && audit.totalYearlyProjection === 0 && (
+        <div className="rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white p-4 shadow-lg flex items-center gap-3">
+          <Shield size={22} />
+          <div>
+            <p className="font-semibold">Nenhuma cobrança indevida identificada</p>
+            <p className="text-sm opacity-90">
+              Auditamos {audit.billsAudited} conta{audit.billsAudited > 1 ? 's' : ''} nos últimos {audit.periodMonths} meses — tudo conforme LC 194/2022, Tema 176 e Lei 14.300.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Cards de indicadores */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

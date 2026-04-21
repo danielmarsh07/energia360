@@ -110,12 +110,45 @@ export async function billsRoutes(app: FastifyInstance) {
     }
   })
 
-  // POST /bills/:billId/audit — Roda auditoria tributária (Tema 176, LC 194, Lei 14.300)
-  app.post('/:billId/audit', async (req, reply) => {
+  // GET /bills/audit/summary — Resumo consolidado de auditorias do cliente (últimos 12 meses)
+  app.get('/audit/summary', async (req, reply) => {
+    const { sub } = req.user as { sub: string }
+    const { months } = req.query as { months?: string }
+    try {
+      const summary = await service.auditSummary(sub, months ? parseInt(months) : 12)
+      return reply.send(summary)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao gerar resumo.'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
+  // GET /bills/:billId/audit — devolve o relatório salvo (ou roda a 1ª vez se não existir)
+  app.get('/:billId/audit', async (req, reply) => {
     const { sub } = req.user as { sub: string }
     const { billId } = req.params as { billId: string }
     try {
       const report = await service.auditExtracted(billId, sub)
+      return reply.send(report)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro na auditoria.'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
+  // POST /bills/:billId/audit — força re-rodar (apenas se plano permitir)
+  app.post('/:billId/audit', async (req, reply) => {
+    const { sub } = req.user as { sub: string }
+    const { billId } = req.params as { billId: string }
+    try {
+      const report = await service.auditExtracted(billId, sub, { forceReaudit: true })
+      if (report.cached) {
+        // Tinha cache e o plano não permite refazer — retorna 200 com aviso
+        return reply.send({
+          ...report,
+          message: 'Seu plano atual não permite refazer a auditoria. Faça upgrade para Premium.',
+        })
+      }
       return reply.send(report)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro na auditoria.'

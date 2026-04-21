@@ -13,6 +13,8 @@ const envSchema = z.object({
   // Anthropic / Claude AI
   ANTHROPIC_API_KEY: z.string().min(1),
   AI_MODEL: z.string().default('claude-haiku-4-5-20251001'),
+  // Fallback para contas complexas (confidence baixa ou campos críticos nulos)
+  AI_MODEL_FALLBACK: z.string().default('claude-sonnet-4-6'),
   // Cloudinary
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),

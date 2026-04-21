@@ -452,6 +452,7 @@ async function main() {
       maxUnits: 5,
       maxUsers: 2,
       aiExtractionsPerMonth: 30,
+      allowBillReaudit: true,
       order: 3,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas'],
     },
@@ -463,6 +464,7 @@ async function main() {
       maxUnits: 999,
       maxUsers: 10,
       aiExtractionsPerMonth: 200,
+      allowBillReaudit: true,
       order: 4,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas', 'multiunidades', 'painel-administrativo'],
     },
@@ -474,6 +476,7 @@ async function main() {
       maxUnits: 9999,
       maxUsers: 999,
       aiExtractionsPerMonth: null, // ilimitado
+      allowBillReaudit: true,
       order: 5,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas', 'multiunidades', 'painel-administrativo', 'portal-parceiro'],
     },
@@ -483,7 +486,11 @@ async function main() {
   for (const { moduleSlugs, ...planData } of plansData) {
     const plan = await prisma.plan.upsert({
       where: { slug: planData.slug },
-      update: { aiExtractionsPerMonth: planData.aiExtractionsPerMonth, features: planData.features },
+      update: {
+        aiExtractionsPerMonth: planData.aiExtractionsPerMonth,
+        features: planData.features,
+        allowBillReaudit: planData.allowBillReaudit ?? false,
+      },
       create: planData,
     })
     plans[planData.slug] = plan

@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { ArrowLeft, CheckCircle, Edit2, Save, Zap, DollarSign, Sun, Activity, ShieldAlert, Scale, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { billsApi, getApiError, type AuditReport, type AuditFinding } from '@/services/api'
+import { billsApi, getApiError, type AuditFinding, type AuditReportWithMeta } from '@/services/api'
 import { UtilityBill } from '@/types'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -123,36 +123,66 @@ function FindingCard({ finding }: { finding: AuditFinding }) {
 }
 
 function AuditSection({ billId }: { billId: string }) {
-  const { data, isLoading, isFetching, refetch, error } = useQuery<AuditReport>({
+  // GET carrega o relatório automaticamente (se já existir em cache, devolve na hora)
+  const queryClient = useQueryClient()
+  const { data, isLoading, error } = useQuery<AuditReportWithMeta>({
     queryKey: ['bill-audit', billId],
     queryFn: () => billsApi.audit(billId),
     retry: false,
-    enabled: false, // só roda quando usuário clica
+  })
+
+  // Mutation pra forçar re-análise (só Premium)
+  const reauditMutation = useMutation({
+    mutationFn: () => billsApi.auditForce(billId),
+    onSuccess: (fresh) => {
+      queryClient.setQueryData(['bill-audit', billId], fresh)
+      if (fresh.cached) {
+        // Backend devolveu o cache porque plano não permite — avisa
+        toast.error(fresh.message ?? 'Faça upgrade para Premium para refazer a auditoria.')
+      } else {
+        toast.success('Auditoria atualizada.')
+      }
+    },
+    onError: (err) => toast.error(getApiError(err)),
   })
 
   const errorMsg = error ? getApiError(error) : null
+  const isRunningFirstTime = isLoading && !data
+  const auditedAt = data?.auditedAt ? new Date(data.auditedAt).toLocaleString('pt-BR') : null
 
   return (
     <Card>
       <CardHeader
         title="Auditoria tributária da conta"
-        subtitle="Detecta ICMS, PIS/COFINS e encargos cobrados indevidamente em contas com energia solar."
+        subtitle={
+          auditedAt
+            ? `Analisada em ${auditedAt}${data?.cached ? ' · resultado salvo' : ''}`
+            : 'Detecta ICMS, PIS/COFINS e encargos cobrados indevidamente em contas com energia solar.'
+        }
         action={
-          <Button
-            variant="primary"
-            size="sm"
-            icon={<Sparkles size={14} />}
-            onClick={() => refetch()}
-            loading={isLoading || isFetching}
-          >
-            {data ? 'Rodar de novo' : 'Analisar conta'}
-          </Button>
+          data ? (
+            data.canReaudit ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<Sparkles size={14} />}
+                onClick={() => reauditMutation.mutate()}
+                loading={reauditMutation.isPending}
+              >
+                Refazer análise
+              </Button>
+            ) : (
+              <Link to="/planos" className="text-xs text-gray-500 hover:text-primary-600 inline-flex items-center gap-1">
+                <Sparkles size={12} /> Refazer análise disponível em <strong className="text-primary-600">planos superiores</strong>
+              </Link>
+            )
+          ) : null
         }
       />
 
-      {!data && !errorMsg && (
+      {isRunningFirstTime && (
         <div className="text-center py-8 text-gray-500 text-sm">
-          Clique em <strong>“Analisar conta”</strong> para ver se a distribuidora cobrou impostos a mais.
+          Analisando sua conta…
         </div>
       )}
 
