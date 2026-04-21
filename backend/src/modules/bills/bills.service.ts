@@ -1,8 +1,11 @@
-import { BillStatus } from '@prisma/client'
+import { BillStatus, Prisma } from '@prisma/client'
 import { prisma } from '../../lib/prisma'
 import { env } from '../../config/env'
 import Anthropic from '@anthropic-ai/sdk'
 import { v2 as cloudinary } from 'cloudinary'
+import { EXTRACTION_PROMPT_V2, mapV2ToSchema, parseExtractionResponse } from './extraction-prompt'
+import { auditBill } from './audit'
+import type { ExtractedBillV2, AuditReport } from './audit/types'
 
 // =============================================
 // Configuração Cloudinary
@@ -30,36 +33,7 @@ function calcCost(model: string, inputTokens: number, outputTokens: number): num
   return +(inputTokens * rates.input + outputTokens * rates.output).toFixed(6)
 }
 
-// =============================================
-// Prompt de extração
-// =============================================
-const EXTRACTION_PROMPT = `Você é um especialista em análise de contas de energia elétrica brasileiras.
-Analise a imagem/documento desta conta e extraia os dados estruturados abaixo.
-Retorne APENAS um JSON válido, sem texto adicional, com exatamente este formato:
-
-{
-  "utilityName": "nome da concessionária (ex: CEMIG, ENEL, LIGHT, COPEL)",
-  "consumerUnitCode": "código da unidade consumidora (UC)",
-  "referenceMonthStr": "mês/ano de referência (ex: 03/2025)",
-  "previousReading": número ou null,
-  "currentReading": número ou null,
-  "consumptionKwh": número ou null,
-  "injectedEnergyKwh": número ou null,
-  "energyCreditsKwh": número ou null,
-  "totalAmount": número ou null,
-  "energyAmount": número ou null,
-  "networkUsageFee": número ou null,
-  "avgConsumption": número ou null,
-  "dueDate": "YYYY-MM-DD" ou null,
-  "readingDate": "YYYY-MM-DD" ou null,
-  "confidence": número entre 0 e 1 indicando sua confiança na extração
-}
-
-Regras:
-- Todos os valores numéricos em kWh ou R$ devem ser números (não strings)
-- dueDate e readingDate devem estar no formato ISO YYYY-MM-DD ou null
-- Se um campo não existir na conta, use null
-- confidence deve refletir a qualidade da imagem e clareza dos dados`
+// Prompt v2 importado de extraction-prompt.ts
 
 // =============================================
 // Helper: download de URL para buffer (com redirect)
@@ -188,17 +162,47 @@ export class BillsService {
   async saveExtractedData(billId: string, data: Record<string, unknown>) {
     // Sanitiza campos antes de salvar — converte datas string para Date e remove campos desconhecidos
     const knownFields = [
+      // v1 legacy
       'utilityName','consumerUnitCode','referenceMonthStr',
       'previousReading','currentReading','consumptionKwh',
       'injectedEnergyKwh','energyCreditsKwh','totalAmount',
       'energyAmount','networkUsageFee','avgConsumption',
       'dueDate','readingDate','isManuallyReviewed','confidence','rawJson',
+      // v2 — identificação
+      'utilityLegalName','utilityCnpj',
+      'invoiceNumber','invoiceSeries','invoiceAccessKey','invoiceCfop',
+      'invoiceAuthProtocol','invoiceIssueDate','barcodeLine','paymentMethod',
+      // v2 — titular
+      'holderName','holderTaxId','supplyAddress','supplyCity','supplyState','supplyZipCode',
+      // v2 — classificação
+      'tariffClass','tariffSubgroup','tariffModality','supplyPhase',
+      'isDistributedGeneration','installedCapacityKwp',
+      // v2 — período/bandeira
+      'billingDays','nextReadingDate','tariffFlag','tariffFlagAmount',
+      // v2 — consumo
+      'meteredConsumptionKwh','billedConsumptionKwh',
+      // v2 — SCEE
+      'injectedKwhTusd','injectedTusdValue','injectedTusdUnitPrice',
+      'injectedKwhTe','injectedTeValue','injectedTeUnitPrice',
+      'suppliedKwhTusd','suppliedTusdValue','suppliedTusdUnitPrice',
+      'suppliedKwhTe','suppliedTeValue','suppliedTeUnitPrice',
+      'creditBalanceKwh','creditsUsedKwh','creditsExpiringKwh','creditsExpiringMonth',
+      // v2 — tributos
+      'icmsBase','icmsRate','icmsValue',
+      'pisBase','pisRate','pisValue',
+      'cofinsBase','cofinsRate','cofinsValue',
+      'publicLightingFee','publicLightingMunicipality',
+      // v2 — observações/meta
+      'tariffAdjustmentNote','observations','isSampleBill','extractionModel',
     ]
+    const dateFields = new Set([
+      'dueDate', 'readingDate', 'invoiceIssueDate', 'nextReadingDate', 'creditsExpiringMonth',
+    ])
     const sanitized: Record<string, unknown> = {}
     for (const key of knownFields) {
       if (!(key in data)) continue
       const val = data[key]
-      if ((key === 'dueDate' || key === 'readingDate') && typeof val === 'string') {
+      if (dateFields.has(key) && typeof val === 'string') {
         sanitized[key] = val ? new Date(val) : null
       } else {
         sanitized[key] = val ?? null
@@ -209,6 +213,80 @@ export class BillsService {
       where: { billId },
       create: { billId, ...sanitized },
       update: { ...sanitized, updatedAt: new Date() },
+    })
+  }
+
+  /**
+   * Persiste a extração v2 completa: campos escalares + filhos em transação.
+   * Limpa filhos anteriores da mesma conta (re-extração substitui tudo).
+   */
+  async saveFullV2Extraction(
+    billId: string,
+    mapped: ReturnType<typeof mapV2ToSchema>,
+    rawJson: Record<string, unknown>,
+  ) {
+    // Prisma tipa Json como valor estrito — cast controlado apenas no campo rawJson.
+    const rawJsonInput = rawJson as unknown as Prisma.InputJsonValue
+    // O mapper já normalizou enums via asEnum(); `as any` é necessário porque
+    // scalar é Record<string, unknown> genérico e não casa com o tipo gerado
+    // do Prisma (que tem unions de enum). Sem casting, teríamos que duplicar
+    // a lista de campos como literal para o TS inferir corretamente.
+    const scalarInput = mapped.scalar as unknown as Prisma.UtilityBillExtractedDataUncheckedUpdateInput
+
+    return prisma.$transaction(async (tx) => {
+      const extracted = await tx.utilityBillExtractedData.upsert({
+        where: { billId },
+        create: {
+          ...(scalarInput as unknown as Prisma.UtilityBillExtractedDataUncheckedCreateInput),
+          billId,
+          rawJson: rawJsonInput,
+          isManuallyReviewed: false,
+        },
+        update: {
+          ...scalarInput,
+          rawJson: rawJsonInput,
+          isManuallyReviewed: false,
+          updatedAt: new Date(),
+        },
+      })
+
+      // Substitui filhos (idempotente — re-extração limpa e recria)
+      await tx.utilityBillLineItem.deleteMany({ where: { extractedDataId: extracted.id } })
+      await tx.utilityBillMeter.deleteMany({ where: { extractedDataId: extracted.id } })
+      await tx.utilityBillCreditLot.deleteMany({ where: { extractedDataId: extracted.id } })
+      await tx.utilityBillMonthlyHistory.deleteMany({ where: { extractedDataId: extracted.id } })
+
+      if (mapped.lineItems.length > 0) {
+        await tx.utilityBillLineItem.createMany({
+          data: mapped.lineItems.map((li) => ({
+            ...li,
+            lineType: li.lineType as Prisma.UtilityBillLineItemCreateManyInput['lineType'],
+            creditGroup: li.creditGroup as Prisma.UtilityBillLineItemCreateManyInput['creditGroup'],
+            extractedDataId: extracted.id,
+          })),
+        })
+      }
+      if (mapped.meters.length > 0) {
+        await tx.utilityBillMeter.createMany({
+          data: mapped.meters.map((m) => ({ ...m, extractedDataId: extracted.id })),
+        })
+      }
+      if (mapped.creditLots.length > 0) {
+        await tx.utilityBillCreditLot.createMany({
+          data: mapped.creditLots.map((c) => ({
+            ...c,
+            group: c.group as Prisma.UtilityBillCreditLotCreateManyInput['group'],
+            extractedDataId: extracted.id,
+          })),
+        })
+      }
+      if (mapped.monthlyHistory.length > 0) {
+        await tx.utilityBillMonthlyHistory.createMany({
+          data: mapped.monthlyHistory.map((h) => ({ ...h, extractedDataId: extracted.id })),
+        })
+      }
+
+      return extracted
     })
   }
 
@@ -300,7 +378,7 @@ export class BillsService {
             type: 'document',
             source: { type: 'base64', media_type: 'application/pdf', data: base64 },
           } as Anthropic.DocumentBlockParam,
-          { type: 'text', text: EXTRACTION_PROMPT },
+          { type: 'text', text: EXTRACTION_PROMPT_V2 },
         ]
       } else {
         // Imagens: URL direta do Cloudinary (sem download)
@@ -315,37 +393,43 @@ export class BillsService {
               ? { type: 'base64', media_type: mimeType as 'image/jpeg' | 'image/png', data: inlineBuffer.toString('base64') }
               : { type: 'url', url: fileUrl },
           } as Anthropic.ImageBlockParam,
-          { type: 'text', text: EXTRACTION_PROMPT },
+          { type: 'text', text: EXTRACTION_PROMPT_V2 },
         ]
       }
 
       const response = await anthropic.messages.create({
         model,
-        max_tokens: 1024,
+        max_tokens: 8192,
         messages: [{ role: 'user', content: messageContent }],
       })
 
       inputTokens = response.usage.input_tokens
       outputTokens = response.usage.output_tokens
 
-      // Parsear o JSON retornado pelo Claude
+      // Parsear o JSON v2 retornado pelo Claude
       const rawText = response.content[0].type === 'text' ? response.content[0].text : ''
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error('Resposta da IA não contém JSON válido.')
+      const v2 = parseExtractionResponse(rawText)
+      if (!v2) throw new Error('Resposta da IA não contém JSON válido.')
 
-      const extracted = JSON.parse(jsonMatch[0]) as Record<string, unknown>
-
-      // Salvar dados extraídos
-      await this.saveExtractedData(billId, {
-        ...extracted,
-        isManuallyReviewed: false,
-        rawJson: { model, rawText, extractedAt: new Date().toISOString() },
+      // Mapeia v2 completo → campos escalares + filhos + salva em transação
+      const mapped = mapV2ToSchema(v2, model)
+      await this.saveFullV2Extraction(billId, mapped, {
+        model,
+        v2,
+        rawText,
+        extractedAt: new Date().toISOString(),
       })
 
       await this.updateStatus(billId, BillStatus.EXTRACTED)
 
-      // Atualizar histórico de consumo
-      if (extracted.consumptionKwh !== null && extracted.totalAmount !== null) {
+      // Atualizar histórico de consumo (tabela agregada)
+      const billedKwh = (mapped.scalar.consumptionKwh ?? mapped.scalar.billedConsumptionKwh) as number | null
+      const total = mapped.scalar.totalAmount as number | null
+      if (billedKwh !== null && total !== null) {
+        const injected = mapped.scalar.injectedEnergyKwh as number | null
+        const credits = mapped.scalar.energyCreditsKwh as number | null
+        const savings = injected ? +(injected * 0.85).toFixed(2) : null
+
         await prisma.consumptionHistory.upsert({
           where: {
             addressUnitId_month_year: {
@@ -358,22 +442,18 @@ export class BillsService {
             addressUnitId: bill.addressUnitId,
             month: bill.referenceMonth,
             year: bill.referenceYear,
-            consumptionKwh: extracted.consumptionKwh as number ?? null,
-            totalAmount: extracted.totalAmount as number ?? null,
-            injectedKwh: extracted.injectedEnergyKwh as number ?? null,
-            creditsKwh: extracted.energyCreditsKwh as number ?? null,
-            estimatedSavings: extracted.injectedEnergyKwh
-              ? +((extracted.injectedEnergyKwh as number) * 0.85).toFixed(2)
-              : null,
+            consumptionKwh: billedKwh,
+            totalAmount: total,
+            injectedKwh: injected,
+            creditsKwh: credits,
+            estimatedSavings: savings,
           },
           update: {
-            consumptionKwh: extracted.consumptionKwh as number ?? null,
-            totalAmount: extracted.totalAmount as number ?? null,
-            injectedKwh: extracted.injectedEnergyKwh as number ?? null,
-            creditsKwh: extracted.energyCreditsKwh as number ?? null,
-            estimatedSavings: extracted.injectedEnergyKwh
-              ? +((extracted.injectedEnergyKwh as number) * 0.85).toFixed(2)
-              : null,
+            consumptionKwh: billedKwh,
+            totalAmount: total,
+            injectedKwh: injected,
+            creditsKwh: credits,
+            estimatedSavings: savings,
           },
         })
       }
@@ -394,7 +474,7 @@ export class BillsService {
         },
       })
 
-      return extracted
+      return v2
 
     } catch (err) {
       success = false
@@ -433,6 +513,27 @@ export class BillsService {
       where: { id: billId },
       include: { extractedData: true },
     })
+  }
+
+  /**
+   * Roda as regras de auditoria contra o JSON v2 já persistido em rawJson.
+   * Não chama a API Anthropic — só processamento local. Se a conta ainda não
+   * tiver extração v2 (bills antigas), retorna INSUFFICIENT_DATA.
+   */
+  async auditExtracted(billId: string, userId: string): Promise<AuditReport> {
+    const bill = await this.findById(billId, userId)
+    const raw = bill.extractedData?.rawJson as { v2?: ExtractedBillV2 } | null
+    const v2 = raw?.v2 ?? null
+
+    if (!v2) {
+      throw new Error(
+        'Esta conta foi extraída com o formato antigo. Reenvie o arquivo (botão "Reenviar") para habilitar a auditoria.'
+      )
+    }
+
+    const utility = bill.extractedData?.utilityName ?? 'Conta'
+    const ref = `${utility} ${bill.referenceMonth}/${bill.referenceYear}`
+    return auditBill(v2, ref)
   }
 
   async getHistory(unitId: string, userId: string) {

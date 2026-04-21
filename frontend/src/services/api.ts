@@ -112,6 +112,41 @@ export const billsApi = {
   getHistory: (unitId: string) =>
     api.get(`/bills/unit/${unitId}/history`).then(r => r.data),
   delete: (billId: string) => api.delete(`/bills/${billId}`).then(r => r.data),
+  audit: (billId: string) =>
+    api.post<AuditReport>(`/bills/${billId}/audit`).then(r => r.data),
+}
+
+// =============================================
+// AUDITORIA — tipos (espelho de backend/src/modules/bills/audit/types.ts)
+// =============================================
+export type AuditSeverity = 'INFO' | 'WARNING' | 'CRITICAL'
+export type AuditStatus = 'OK' | 'OVERCHARGE_DETECTED' | 'INSUFFICIENT_DATA'
+export interface AuditEvidence {
+  lineDescription: string
+  field: string
+  value: number
+  note?: string
+}
+export interface AuditFinding {
+  ruleId: string
+  ruleName: string
+  status: AuditStatus
+  severity: AuditSeverity
+  monthlyOverchargeAmount: number
+  yearlyProjection: number
+  explanation: string
+  legalBasis: string[]
+  evidence: AuditEvidence[]
+}
+export interface AuditReport {
+  billRef: string
+  utility: string | null
+  referenceLabel: string | null
+  totalBillAmount: number | null
+  findings: AuditFinding[]
+  totalMonthlyOvercharge: number
+  totalYearlyProjection: number
+  generatedAt: string
 }
 
 // =============================================

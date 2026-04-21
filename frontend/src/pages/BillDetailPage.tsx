@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, CheckCircle, Edit2, Save, Zap, DollarSign, Sun, Activity } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Edit2, Save, Zap, DollarSign, Sun, Activity, ShieldAlert, Scale, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { billsApi, getApiError } from '@/services/api'
+import { billsApi, getApiError, type AuditReport, type AuditFinding } from '@/services/api'
 import { UtilityBill } from '@/types'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -21,6 +21,176 @@ function DataRow({ label, value, unit }: { label: string; value?: number | null;
         {unit === 'R$' ? formatCurrency(value) : unit ? `${value.toLocaleString('pt-BR')} ${unit}` : value}
       </span>
     </div>
+  )
+}
+
+const sevStyles: Record<string, { bg: string; border: string; icon: string; label: string }> = {
+  CRITICAL: { bg: 'bg-red-50',    border: 'border-red-200',    icon: 'text-red-600',    label: 'Cobrança indevida detectada' },
+  WARNING:  { bg: 'bg-amber-50',  border: 'border-amber-200',  icon: 'text-amber-600',  label: 'Atenção' },
+  INFO:     { bg: 'bg-blue-50',   border: 'border-blue-200',   icon: 'text-blue-600',   label: 'Informação' },
+}
+
+function FindingCard({ finding }: { finding: AuditFinding }) {
+  const [expanded, setExpanded] = useState(finding.status === 'OVERCHARGE_DETECTED')
+  const s = sevStyles[finding.severity] ?? sevStyles.INFO
+  const hasOvercharge = finding.status === 'OVERCHARGE_DETECTED'
+
+  return (
+    <div className={`rounded-2xl border ${s.border} ${s.bg} p-4`}>
+      <div className="flex items-start gap-3">
+        <ShieldAlert size={22} className={s.icon} />
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900">{finding.ruleName}</h3>
+            {hasOvercharge && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-red-600 text-white font-semibold">
+                {s.label}
+              </span>
+            )}
+            {finding.status === 'OK' && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">
+                Conforme
+              </span>
+            )}
+          </div>
+
+          {hasOvercharge && (
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="bg-white rounded-xl p-3 border border-red-100">
+                <p className="text-xs text-gray-500">Cobrança indevida/mês</p>
+                <p className="text-lg font-bold text-red-600">
+                  {finding.monthlyOverchargeAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </p>
+              </div>
+              <div className="bg-white rounded-xl p-3 border border-red-100">
+                <p className="text-xs text-gray-500">Projeção anual</p>
+                <p className="text-lg font-bold text-red-600">
+                  {finding.yearlyProjection.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <p className="text-sm text-gray-700 mt-3 leading-relaxed">{finding.explanation}</p>
+
+          <button
+            className="mt-3 text-xs font-medium text-gray-600 hover:text-gray-900 inline-flex items-center gap-1"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            {expanded ? 'Ocultar detalhes' : 'Ver detalhes e base legal'}
+          </button>
+
+          {expanded && (
+            <div className="mt-3 space-y-3">
+              {finding.evidence.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                    Linhas da sua conta onde o erro aparece
+                  </p>
+                  <ul className="space-y-2">
+                    {finding.evidence.map((e, i) => (
+                      <li key={i} className="bg-white rounded-lg p-3 border border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-900">{e.lineDescription}</span>
+                          <span className={`text-sm font-bold ${e.value >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {e.value >= 0 ? '+' : ''}{e.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </div>
+                        {e.note && <p className="text-xs text-gray-500 mt-1">{e.note}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1">
+                  <Scale size={12} /> Base jurídica
+                </p>
+                <ul className="space-y-1">
+                  {finding.legalBasis.map((law) => (
+                    <li key={law} className="text-xs text-gray-600">• {law}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AuditSection({ billId }: { billId: string }) {
+  const { data, isLoading, isFetching, refetch, error } = useQuery<AuditReport>({
+    queryKey: ['bill-audit', billId],
+    queryFn: () => billsApi.audit(billId),
+    retry: false,
+    enabled: false, // só roda quando usuário clica
+  })
+
+  const errorMsg = error ? getApiError(error) : null
+
+  return (
+    <Card>
+      <CardHeader
+        title="Auditoria tributária da conta"
+        subtitle="Detecta ICMS, PIS/COFINS e encargos cobrados indevidamente em contas com energia solar."
+        action={
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Sparkles size={14} />}
+            onClick={() => refetch()}
+            loading={isLoading || isFetching}
+          >
+            {data ? 'Rodar de novo' : 'Analisar conta'}
+          </Button>
+        }
+      />
+
+      {!data && !errorMsg && (
+        <div className="text-center py-8 text-gray-500 text-sm">
+          Clique em <strong>“Analisar conta”</strong> para ver se a distribuidora cobrou impostos a mais.
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">
+          {errorMsg}
+        </div>
+      )}
+
+      {data && (
+        <div className="space-y-4">
+          {data.totalMonthlyOvercharge > 0 ? (
+            <div className="rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white p-5">
+              <p className="text-sm opacity-90">Cobrança indevida detectada nesta conta</p>
+              <p className="text-3xl font-bold mt-1">
+                {data.totalMonthlyOvercharge.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}<span className="text-base font-normal opacity-90">/mês</span>
+              </p>
+              <p className="text-sm opacity-90 mt-1">
+                Projeção anual: <strong>{data.totalYearlyProjection.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-green-50 border border-green-200 p-5 text-green-800">
+              <p className="font-semibold">✅ Nenhuma cobrança indevida identificada nesta conta.</p>
+              <p className="text-sm mt-1">Os tributos foram aplicados de acordo com a LC 194/2022 e o Tema 176 do STF.</p>
+            </div>
+          )}
+
+          {data.findings.map((f) => (
+            <FindingCard key={f.ruleId} finding={f} />
+          ))}
+
+          <p className="text-xs text-gray-400 text-center">
+            Relatório gerado em {new Date(data.generatedAt).toLocaleString('pt-BR')}
+          </p>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -167,6 +337,11 @@ export default function BillDetailPage() {
           </form>
         )}
       </Card>
+
+      {/* Auditoria */}
+      {id && (ext?.isManuallyReviewed || bill.status === 'EXTRACTED' || bill.status === 'VALIDATED') && (
+        <AuditSection billId={id} />
+      )}
 
       {/* Arquivos */}
       {bill.files && bill.files.length > 0 && (

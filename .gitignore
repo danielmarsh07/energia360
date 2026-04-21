@@ -27,3 +27,10 @@ Thumbs.db
 
 # Vite cache
 frontend/.vite/
+
+# Dados pessoais / sensíveis (PDFs de contas reais, JSONs extraídos)
+Contas exemplos/
+backend/scripts/extraction-results/
+
+# Config local do Claude Code
+.claude/

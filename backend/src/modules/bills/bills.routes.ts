@@ -110,6 +110,19 @@ export async function billsRoutes(app: FastifyInstance) {
     }
   })
 
+  // POST /bills/:billId/audit — Roda auditoria tributária (Tema 176, LC 194, Lei 14.300)
+  app.post('/:billId/audit', async (req, reply) => {
+    const { sub } = req.user as { sub: string }
+    const { billId } = req.params as { billId: string }
+    try {
+      const report = await service.auditExtracted(billId, sub)
+      return reply.send(report)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro na auditoria.'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
   // POST /bills/:billId/validate - Confirma/edita dados extraídos
   app.post('/:billId/validate', async (req, reply) => {
     const { sub } = req.user as { sub: string }

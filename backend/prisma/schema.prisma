@@ -38,14 +38,14 @@ model AiUsageLog {
   id           String   @id @default(cuid())
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  billId       String?  // qual conta foi analisada
-  model        String   // ex: claude-haiku-4-5-20251001
+  billId       String? // qual conta foi analisada
+  model        String // ex: claude-haiku-4-5-20251001
   inputTokens  Int      @default(0)
   outputTokens Int      @default(0)
   totalTokens  Int      @default(0)
   costUsd      Float    @default(0)
   action       String   @default("bill_extraction")
-  planSlug     String?  // snapshot do plano no momento do uso
+  planSlug     String? // snapshot do plano no momento do uso
   success      Boolean  @default(true)
   errorMessage String?
   createdAt    DateTime @default(now())
@@ -68,22 +68,22 @@ enum UserRole {
 // =============================================
 
 model ClientProfile {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Dados pessoais / empresariais
   fullName        String
   documentType    DocumentType @default(CPF)
-  document        String?      // CPF ou CNPJ
+  document        String? // CPF ou CNPJ
   responsibleName String?
   observations    String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  contacts        Contact[]
-  addressUnits    AddressUnit[]
+  contacts     Contact[]
+  addressUnits AddressUnit[]
 
   @@map("client_profiles")
 }
@@ -98,17 +98,17 @@ enum DocumentType {
 // =============================================
 
 model Contact {
-  id              String      @id @default(cuid())
+  id              String        @id @default(cuid())
   clientProfileId String
   clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
-  type            ContactType
-  value           String
-  label           String?     // ex: "Celular pessoal", "WhatsApp"
-  isPrimary       Boolean     @default(false)
+  type      ContactType
+  value     String
+  label     String? // ex: "Celular pessoal", "WhatsApp"
+  isPrimary Boolean     @default(false)
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("contacts")
 }
@@ -129,28 +129,28 @@ model AddressUnit {
   clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
   // Identificação
-  name            String        // ex: Casa principal, Chácara, Loja Centro
-  consumerUnitCode String?      // Código UC da concessionária
-  utility         String?       // Nome da concessionária (CEMIG, LIGHT, ENEL, etc.)
+  name             String // ex: Casa principal, Chácara, Loja Centro
+  consumerUnitCode String? // Código UC da concessionária
+  utility          String? // Nome da concessionária (CEMIG, LIGHT, ENEL, etc.)
 
   // Endereço
-  zipCode         String?
-  street          String?
-  number          String?
-  complement      String?
-  neighborhood    String?
-  city            String?
-  state           String?
+  zipCode      String?
+  street       String?
+  number       String?
+  complement   String?
+  neighborhood String?
+  city         String?
+  state        String?
 
-  observations    String?
-  isActive        Boolean       @default(true)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  observations String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  energyPoints    EnergyPoint[]
-  utilityBills    UtilityBill[]
+  energyPoints       EnergyPoint[]
+  utilityBills       UtilityBill[]
   consumptionHistory ConsumptionHistory[]
-  alerts          Alert[]
+  alerts             Alert[]
 
   @@map("address_units")
 }
@@ -160,24 +160,24 @@ model AddressUnit {
 // =============================================
 
 model EnergyPoint {
-  id              String          @id @default(cuid())
-  addressUnitId   String
-  addressUnit     AddressUnit     @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  addressUnitId String
+  addressUnit   AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
 
-  name            String
-  pointType       EnergyPointType @default(RESIDENTIAL)
-  hasSolar        Boolean         @default(false)
+  name      String
+  pointType EnergyPointType @default(RESIDENTIAL)
+  hasSolar  Boolean         @default(false)
 
   // Dados do sistema solar (quando hasSolar = true)
-  solarPowerKwp   Float?          // Potência em kWp
-  panelsCount     Int?
-  installDate     DateTime?
-  inverterModel   String?
+  solarPowerKwp Float? // Potência em kWp
+  panelsCount   Int?
+  installDate   DateTime?
+  inverterModel String?
 
-  technicalNotes  String?
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  technicalNotes String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("energy_points")
 }
@@ -194,90 +194,329 @@ enum EnergyPointType {
 // =============================================
 
 model UtilityBill {
-  id              String          @id @default(cuid())
-  addressUnitId   String
-  addressUnit     AddressUnit     @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  addressUnitId String
+  addressUnit   AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
 
-  referenceMonth  Int             // 1-12
-  referenceYear   Int
-  dueDate         DateTime?
-  status          BillStatus      @default(PENDING)
+  referenceMonth Int // 1-12
+  referenceYear  Int
+  dueDate        DateTime?
+  status         BillStatus @default(PENDING)
 
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  files           UtilityBillFile[]
-  extractedData   UtilityBillExtractedData?
+  files         UtilityBillFile[]
+  extractedData UtilityBillExtractedData?
 
   @@map("utility_bills")
 }
 
 enum BillStatus {
-  PENDING       // Aguardando upload
-  UPLOADED      // Arquivo enviado
-  PROCESSING    // Processando OCR
-  EXTRACTED     // Dados extraídos, aguardando validação
-  VALIDATED     // Validado pelo usuário
-  FAILED        // Falha no processamento
+  PENDING // Aguardando upload
+  UPLOADED // Arquivo enviado
+  PROCESSING // Processando OCR
+  EXTRACTED // Dados extraídos, aguardando validação
+  VALIDATED // Validado pelo usuário
+  FAILED // Falha no processamento
 }
 
 model UtilityBillFile {
-  id                  String       @id @default(cuid())
-  billId              String
-  bill                UtilityBill  @relation(fields: [billId], references: [id], onDelete: Cascade)
+  id     String      @id @default(cuid())
+  billId String
+  bill   UtilityBill @relation(fields: [billId], references: [id], onDelete: Cascade)
 
-  fileName            String
-  originalName        String
-  mimeType            String
-  fileSize            Int
-  filePath            String
-  cloudinaryUrl       String?      // URL pública no Cloudinary
-  cloudinaryPublicId  String?      // ID para deletar/gerenciar no Cloudinary
-  extractedText       String?      // Texto bruto extraído pelo OCR
+  fileName           String
+  originalName       String
+  mimeType           String
+  fileSize           Int
+  filePath           String
+  cloudinaryUrl      String? // URL pública no Cloudinary
+  cloudinaryPublicId String? // ID para deletar/gerenciar no Cloudinary
+  extractedText      String? // Texto bruto extraído pelo OCR
 
-  uploadedAt          DateTime     @default(now())
+  uploadedAt DateTime @default(now())
 
   @@map("utility_bill_files")
 }
 
 model UtilityBillExtractedData {
-  id                String      @id @default(cuid())
-  billId            String      @unique
-  bill              UtilityBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  id     String      @id @default(cuid())
+  billId String      @unique
+  bill   UtilityBill @relation(fields: [billId], references: [id], onDelete: Cascade)
 
-  // Dados principais da conta
+  // Dados principais da conta (v1 — mantidos por compatibilidade)
   utilityName       String?
   consumerUnitCode  String?
   referenceMonthStr String?
 
-  // Leituras
-  previousReading   Float?      // kWh - leitura anterior
-  currentReading    Float?      // kWh - leitura atual
-  consumptionKwh    Float?      // kWh consumido
+  // Leituras (v1)
+  previousReading Float?
+  currentReading  Float?
+  consumptionKwh  Float?
 
-  // Solar / compensação
-  injectedEnergyKwh Float?      // energia injetada na rede
-  energyCreditsKwh  Float?      // créditos de energia disponíveis
+  // Solar / compensação (v1)
+  injectedEnergyKwh Float?
+  energyCreditsKwh  Float?
 
-  // Valores financeiros
-  totalAmount       Float?      // valor total da conta
-  energyAmount      Float?      // valor da energia consumida
-  networkUsageFee   Float?      // taxa de uso da rede (TUSD)
-  avgConsumption    Float?      // média de consumo em kWh
+  // Valores financeiros (v1)
+  totalAmount     Float?
+  energyAmount    Float?
+  networkUsageFee Float?
+  avgConsumption  Float?
 
-  // Datas
-  dueDate           DateTime?
-  readingDate       DateTime?
+  dueDate     DateTime?
+  readingDate DateTime?
+
+  // ============================================================
+  // v2 — Identificação legal da concessionária
+  // ============================================================
+  utilityLegalName String?
+  utilityCnpj      String?
+
+  // Nota fiscal
+  invoiceNumber       String?
+  invoiceSeries       String?
+  invoiceAccessKey    String?
+  invoiceCfop         String?
+  invoiceAuthProtocol String?
+  invoiceIssueDate    DateTime?
+  barcodeLine         String?
+  paymentMethod       String?
+
+  // Titular e endereço de fornecimento
+  holderName    String?
+  holderTaxId   String?
+  supplyAddress String?
+  supplyCity    String?
+  supplyState   String?
+  supplyZipCode String?
+
+  // Classificação tarifária
+  tariffClass             TariffClass?
+  tariffSubgroup          String? // B1, B2, B3, A4, A3a, etc.
+  tariffModality          TariffModality?
+  supplyPhase             SupplyPhase?
+  isDistributedGeneration Boolean         @default(false)
+  installedCapacityKwp    Float?
+
+  // Período / leitura
+  billingDays     Int?
+  nextReadingDate DateTime?
+
+  // Bandeira tarifária
+  tariffFlag       TariffFlag?
+  tariffFlagAmount Float?
+
+  // Consumo bruto × faturado (pós compensação)
+  meteredConsumptionKwh Float?
+  billedConsumptionKwh  Float?
+
+  // SCEE detalhado — energia injetada
+  injectedKwhTusd       Float?
+  injectedTusdValue     Float?
+  injectedTusdUnitPrice Float?
+  injectedKwhTe         Float?
+  injectedTeValue       Float?
+  injectedTeUnitPrice   Float?
+
+  // SCEE detalhado — energia fornecida (via crédito)
+  suppliedKwhTusd       Float?
+  suppliedTusdValue     Float?
+  suppliedTusdUnitPrice Float?
+  suppliedKwhTe         Float?
+  suppliedTeValue       Float?
+  suppliedTeUnitPrice   Float?
+
+  // SCEE — saldos
+  creditBalanceKwh     Float?
+  creditsUsedKwh       Float?
+  creditsExpiringKwh   Float?
+  creditsExpiringMonth DateTime?
+
+  // Tributos consolidados
+  icmsBase                   Float?
+  icmsRate                   Float?
+  icmsValue                  Float?
+  pisBase                    Float?
+  pisRate                    Float?
+  pisValue                   Float?
+  cofinsBase                 Float?
+  cofinsRate                 Float?
+  cofinsValue                Float?
+  publicLightingFee          Float?
+  publicLightingMunicipality String?
+
+  // Reajuste / observações
+  tariffAdjustmentNote String?
+  observations         String?
+
+  // Metadados
+  isSampleBill    Boolean @default(false)
+  extractionModel String? // modelo Claude usado (ex: claude-haiku-4-5-20251001)
 
   // Controle de qualidade
-  isManuallyReviewed Boolean    @default(false)
-  confidence        Float?      // 0-1: confiança do OCR
-  rawJson           Json?       // JSON bruto para auditoria
+  isManuallyReviewed Boolean @default(false)
+  confidence         Float?
+  rawJson            Json? // JSON v2 completo + texto bruto
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações v2
+  lineItems      UtilityBillLineItem[]
+  meters         UtilityBillMeter[]
+  creditLots     UtilityBillCreditLot[]
+  monthlyHistory UtilityBillMonthlyHistory[]
 
   @@map("utility_bill_extracted_data")
+}
+
+// =============================================
+// v2 — ENUMS DE CLASSIFICAÇÃO
+// =============================================
+
+enum TariffClass {
+  RESIDENTIAL
+  COMMERCIAL
+  RURAL
+  INDUSTRIAL
+  PUBLIC
+}
+
+enum TariffModality {
+  CONVENTIONAL
+  WHITE
+  BLUE
+  GREEN
+}
+
+enum TariffFlag {
+  GREEN
+  YELLOW
+  RED_1
+  RED_2
+}
+
+enum SupplyPhase {
+  MONO
+  BI
+  TRI
+}
+
+enum LineType {
+  ENERGY_CONSUMED
+  ENERGY_INJECTED_TE
+  ENERGY_INJECTED_TUSD
+  ENERGY_SUPPLIED_TE
+  ENERGY_SUPPLIED_TUSD
+  CIP
+  FLAG
+  FINE
+  INTEREST
+  REFUND_PIS_COFINS
+  OTHER
+}
+
+enum CreditGroup {
+  GD1
+  GD2
+}
+
+// =============================================
+// v2 — LINHAS DE FATURAMENTO
+// =============================================
+
+model UtilityBillLineItem {
+  id              String                   @id @default(cuid())
+  extractedDataId String
+  extractedData   UtilityBillExtractedData @relation(fields: [extractedDataId], references: [id], onDelete: Cascade)
+
+  orderIndex       Int          @default(0)
+  description      String
+  lineType         LineType
+  unit             String?
+  quantity         Float?
+  unitPriceWithTax Float?
+  unitTariff       Float?
+  totalValue       Float
+  pisCofinsValue   Float?
+  icmsBase         Float?
+  icmsRate         Float?
+  icmsValue        Float?
+  postoTarifario   String?
+  vintageLabel     String?
+  creditGroup      CreditGroup?
+
+  createdAt DateTime @default(now())
+
+  @@index([extractedDataId])
+  @@map("utility_bill_line_items")
+}
+
+// =============================================
+// v2 — MEDIDORES
+// =============================================
+
+model UtilityBillMeter {
+  id              String                   @id @default(cuid())
+  extractedDataId String
+  extractedData   UtilityBillExtractedData @relation(fields: [extractedDataId], references: [id], onDelete: Cascade)
+
+  serialNumber        String
+  measurement         String? // "Energia Ativa", "Energia Injetada", etc.
+  postoTarifario      String?
+  previousReading     Float?
+  previousReadingDate DateTime?
+  currentReading      Float?
+  currentReadingDate  DateTime?
+  constant            Float?
+  consumptionKwh      Float?
+
+  @@index([extractedDataId])
+  @@map("utility_bill_meters")
+}
+
+// =============================================
+// v2 — SAFRAS DE CRÉDITO SCEE
+// =============================================
+
+model UtilityBillCreditLot {
+  id              String                   @id @default(cuid())
+  extractedDataId String
+  extractedData   UtilityBillExtractedData @relation(fields: [extractedDataId], references: [id], onDelete: Cascade)
+
+  label         String // "mJC 08/2024 mPT GD1"
+  vintageMonth  DateTime?
+  group         CreditGroup?
+  quantityKwh   Float
+  teUnitPrice   Float?
+  tusdUnitPrice Float?
+  teValue       Float?
+  tusdValue     Float?
+
+  @@index([extractedDataId])
+  @@map("utility_bill_credit_lots")
+}
+
+// =============================================
+// v2 — HISTÓRICO 12 MESES (impresso na própria conta)
+// =============================================
+
+model UtilityBillMonthlyHistory {
+  id              String                   @id @default(cuid())
+  extractedDataId String
+  extractedData   UtilityBillExtractedData @relation(fields: [extractedDataId], references: [id], onDelete: Cascade)
+
+  monthLabel     String // "MAR/26"
+  month          Int
+  year           Int
+  consumptionKwh Float
+  billingDays    Int?
+
+  @@unique([extractedDataId, month, year])
+  @@index([extractedDataId])
+  @@map("utility_bill_monthly_history")
 }
 
 // =============================================
@@ -285,20 +524,20 @@ model UtilityBillExtractedData {
 // =============================================
 
 model ConsumptionHistory {
-  id                String      @id @default(cuid())
-  addressUnitId     String
-  addressUnit       AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  addressUnitId String
+  addressUnit   AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
 
-  month             Int
-  year              Int
-  consumptionKwh    Float?
-  totalAmount       Float?
-  injectedKwh       Float?
-  creditsKwh        Float?
-  estimatedSavings  Float?
+  month            Int
+  year             Int
+  consumptionKwh   Float?
+  totalAmount      Float?
+  injectedKwh      Float?
+  creditsKwh       Float?
+  estimatedSavings Float?
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([addressUnitId, month, year])
   @@map("consumption_history")
@@ -309,33 +548,33 @@ model ConsumptionHistory {
 // =============================================
 
 model Alert {
-  id              String      @id @default(cuid())
-  addressUnitId   String
-  addressUnit     AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  addressUnitId String
+  addressUnit   AddressUnit @relation(fields: [addressUnitId], references: [id], onDelete: Cascade)
 
-  type            AlertType
-  severity        AlertSeverity @default(INFO)
-  title           String
-  message         String
-  isRead          Boolean     @default(false)
-  resolvedAt      DateTime?
+  type       AlertType
+  severity   AlertSeverity @default(INFO)
+  title      String
+  message    String
+  isRead     Boolean       @default(false)
+  resolvedAt DateTime?
 
-  referenceMonth  Int?
-  referenceYear   Int?
+  referenceMonth Int?
+  referenceYear  Int?
 
-  createdAt       DateTime    @default(now())
+  createdAt DateTime @default(now())
 
   @@map("alerts")
 }
 
 enum AlertType {
-  HIGH_CONSUMPTION        // Consumo acima da média
-  HIGH_BILL               // Valor acima do histórico
-  GENERATION_DROP         // Queda brusca de geração
-  SOLAR_ISSUE             // Possível problema na instalação
-  INCONSISTENT_READING    // Leitura inconsistente
-  MISSING_BILL            // Meses sem envio de conta
-  GENERAL                 // Alerta geral
+  HIGH_CONSUMPTION // Consumo acima da média
+  HIGH_BILL // Valor acima do histórico
+  GENERATION_DROP // Queda brusca de geração
+  SOLAR_ISSUE // Possível problema na instalação
+  INCONSISTENT_READING // Leitura inconsistente
+  MISSING_BILL // Meses sem envio de conta
+  GENERAL // Alerta geral
 }
 
 enum AlertSeverity {
@@ -349,30 +588,30 @@ enum AlertSeverity {
 // =============================================
 
 model TutorialArticle {
-  id          String          @id @default(cuid())
-  slug        String          @unique
+  id          String           @id @default(cuid())
+  slug        String           @unique
   title       String
   summary     String
   content     String
   category    TutorialCategory
-  readingTime Int?            // minutos
+  readingTime Int? // minutos
   icon        String?
-  isPublished Boolean         @default(true)
-  order       Int             @default(0)
+  isPublished Boolean          @default(true)
+  order       Int              @default(0)
 
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("tutorial_articles")
 }
 
 enum TutorialCategory {
-  SOLAR_BASICS        // Como funciona a energia solar
-  BILLING             // Entendendo sua conta
-  MONITORING          // Monitoramento e acompanhamento
-  MAINTENANCE         // Manutenção e cuidados
-  FAQ                 // Perguntas frequentes
-  SAVINGS             // Economia e retorno
+  SOLAR_BASICS // Como funciona a energia solar
+  BILLING // Entendendo sua conta
+  MONITORING // Monitoramento e acompanhamento
+  MAINTENANCE // Manutenção e cuidados
+  FAQ // Perguntas frequentes
+  SAVINGS // Economia e retorno
 }
 
 // =============================================
@@ -387,7 +626,7 @@ model Plan {
   features              String[]
   maxUnits              Int      @default(1)
   maxUsers              Int      @default(1)
-  aiExtractionsPerMonth Int?     // null = ilimitado
+  aiExtractionsPerMonth Int? // null = ilimitado
   isActive              Boolean  @default(true)
   order                 Int      @default(0)
 
