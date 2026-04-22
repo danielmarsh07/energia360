@@ -567,18 +567,31 @@ model Alert {
   referenceMonth Int?
   referenceYear  Int?
 
+  // Auditoria automática
+  billId         String?
+  ruleId         String? // código da regra que gerou (ICMS_OVER_INJECTED, FIO_B_OVER_LIMIT, ...)
+  monthlyImpact  Float?
+  yearlyImpact   Float?
+  actionUrl      String? // ex: /contas/<billId>
+
   createdAt DateTime @default(now())
 
+  @@index([addressUnitId, type, referenceMonth, referenceYear])
+  @@index([billId])
   @@map("alerts")
 }
 
 enum AlertType {
   HIGH_CONSUMPTION // Consumo acima da média
   HIGH_BILL // Valor acima do histórico
-  GENERATION_DROP // Queda brusca de geração
+  GENERATION_DROP // Queda brusca de geração (Regra H)
   SOLAR_ISSUE // Possível problema na instalação
   INCONSISTENT_READING // Leitura inconsistente
   MISSING_BILL // Meses sem envio de conta
+  ICMS_OVERCHARGE // Regra A: ICMS sobre energia compensada
+  FIO_B_OVER_LIMIT // Regra B: Fio B acima do teto Lei 14.300
+  CREDITS_EXPIRING // Regra G: créditos SCEE prestes a expirar
+  PIS_COFINS_REFUND // Regra F: possível direito a Tema 745
   GENERAL // Alerta geral
 }
 
@@ -633,6 +646,7 @@ model Plan {
   maxUsers              Int      @default(1)
   aiExtractionsPerMonth Int? // null = ilimitado
   allowBillReaudit      Boolean  @default(false) // true = pode rodar auditoria mais de uma vez por conta
+  allowAuditPdfExport   Boolean  @default(false) // true = pode baixar relatório PDF das auditorias
   isActive              Boolean  @default(true)
   order                 Int      @default(0)
 

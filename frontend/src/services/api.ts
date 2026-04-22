@@ -118,6 +118,13 @@ export const billsApi = {
     api.post<AuditReportWithMeta & { message?: string }>(`/bills/${billId}/audit`).then(r => r.data),
   auditSummary: (months: number = 12) =>
     api.get<AuditSummary>(`/bills/audit/summary`, { params: { months } }).then(r => r.data),
+  auditPdfUrl: (billId: string) => {
+    // Download de PDF exige o token JWT; como href direto não carrega header,
+    // geramos URL com query param ?token=... que o endpoint aceita.
+    const token = localStorage.getItem('energia360:token') ?? ''
+    const base = import.meta.env.VITE_API_URL || '/api'
+    return `${base}/bills/${billId}/audit/report.pdf?token=${encodeURIComponent(token)}`
+  },
 }
 
 export interface AuditReportWithMeta extends AuditReport {

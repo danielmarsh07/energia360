@@ -594,6 +594,49 @@ export class BillsService {
    * Não chama a API Anthropic — só processamento local. Se a conta ainda não
    * tiver extração v2 (bills antigas), retorna INSUFFICIENT_DATA.
    */
+  /**
+   * Gera PDF da auditoria — roda a auditoria (ou pega cache) e formata.
+   * Sempre usa cache se existir, independente do plano; aqui o gate é só
+   * sobre o download em si.
+   */
+  async generateAuditPdf(billId: string, userId: string): Promise<Buffer> {
+    const bill = await this.findById(billId, userId)
+
+    // Valida plano
+    const subscription = await prisma.subscription.findUnique({
+      where: { userId },
+      include: { plan: true },
+    })
+    if (!subscription?.plan.allowAuditPdfExport) {
+      throw new Error(
+        'Seu plano atual não permite download do relatório em PDF. Faça upgrade para um plano superior.'
+      )
+    }
+
+    // Garante que tem auditoria cacheada (roda se não existir)
+    const report = bill.extractedData?.auditJson
+      ? (bill.extractedData.auditJson as unknown as AuditReport)
+      : (await this.auditExtracted(billId, userId))
+
+    const { generateAuditPdf } = await import('./pdf-report')
+    return generateAuditPdf(
+      {
+        utilityName: bill.extractedData?.utilityName ?? null,
+        utilityCnpj: bill.extractedData?.utilityCnpj ?? null,
+        consumerUnitCode: bill.extractedData?.consumerUnitCode ?? null,
+        holderName: bill.extractedData?.holderName ?? null,
+        holderTaxId: bill.extractedData?.holderTaxId ?? null,
+        supplyAddress: bill.extractedData?.supplyAddress ?? null,
+        supplyCity: bill.extractedData?.supplyCity ?? null,
+        supplyState: bill.extractedData?.supplyState ?? null,
+        referenceMonth: bill.referenceMonth,
+        referenceYear: bill.referenceYear,
+        totalAmount: bill.extractedData?.totalAmount ?? null,
+      },
+      report,
+    )
+  }
+
   async auditExtracted(
     billId: string,
     userId: string,
@@ -660,7 +703,62 @@ export class BillsService {
       })
     }
 
+    // Sincroniza alertas: apaga anteriores dessa conta e cria novos com base nos findings
+    await this.syncAuditAlerts(billId, bill.addressUnitId, bill.referenceMonth, bill.referenceYear, report)
+
     return { ...report, cached: false, auditedAt: new Date().toISOString(), canReaudit }
+  }
+
+  /**
+   * Mapeia ruleId do motor de auditoria → AlertType do enum Prisma.
+   * Findings que não se encaixam viram GENERAL.
+   */
+  private ruleToAlertType(ruleId: string): 'ICMS_OVERCHARGE' | 'FIO_B_OVER_LIMIT' | 'CREDITS_EXPIRING' | 'PIS_COFINS_REFUND' | 'GENERATION_DROP' | 'GENERAL' {
+    switch (ruleId) {
+      case 'ICMS_OVER_INJECTED': return 'ICMS_OVERCHARGE'
+      case 'FIO_B_OVER_LIMIT': return 'FIO_B_OVER_LIMIT'
+      case 'CREDITS_EXPIRING': return 'CREDITS_EXPIRING'
+      case 'PIS_COFINS_REFUND_TEMA_745': return 'PIS_COFINS_REFUND'
+      case 'GENERATION_UNDERPERFORM': return 'GENERATION_DROP'
+      default: return 'GENERAL'
+    }
+  }
+
+  /**
+   * Estratégia: DELETE todos os alerts linkados a essa bill → cria novos
+   * a partir dos findings OVERCHARGE_DETECTED. Garante que a tela de alertas
+   * sempre reflete o resultado mais recente.
+   */
+  private async syncAuditAlerts(
+    billId: string,
+    addressUnitId: string,
+    referenceMonth: number,
+    referenceYear: number,
+    report: AuditReport,
+  ) {
+    await prisma.alert.deleteMany({ where: { billId } })
+
+    const alertsToCreate = report.findings
+      .filter((f) => f.status === 'OVERCHARGE_DETECTED' && f.severity !== 'INFO')
+      .map((f) => ({
+        addressUnitId,
+        billId,
+        ruleId: f.ruleId,
+        type: this.ruleToAlertType(f.ruleId),
+        severity: f.severity as 'WARNING' | 'CRITICAL',
+        title: f.ruleName,
+        message: f.explanation.length > 500 ? f.explanation.slice(0, 497) + '...' : f.explanation,
+        monthlyImpact: f.monthlyOverchargeAmount || null,
+        yearlyImpact: f.yearlyProjection || null,
+        referenceMonth,
+        referenceYear,
+        actionUrl: `/contas/${billId}`,
+        isRead: false,
+      }))
+
+    if (alertsToCreate.length > 0) {
+      await prisma.alert.createMany({ data: alertsToCreate })
+    }
   }
 
   /**
@@ -765,7 +863,7 @@ export class BillsService {
         yearly: +agg.yearly.toFixed(2),
         occurrences: agg.count,
       })).sort((a, b) => b.yearly - a.yearly),
-      perBill: perBill.filter((p) => p.monthlyOvercharge > 0).slice(0, 20),
+      perBill: perBill.filter((p) => p.monthlyOvercharge > 0),
     }
   }
 

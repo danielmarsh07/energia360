@@ -31,6 +31,7 @@ frontend/.vite/
 # Dados pessoais / sensíveis (PDFs de contas reais, JSONs extraídos)
 Contas exemplos/
 backend/scripts/extraction-results/
+backend/scripts/pdf-output/
 
 # Config local do Claude Code
 .claude/

@@ -123,6 +123,30 @@ export async function billsRoutes(app: FastifyInstance) {
     }
   })
 
+  // GET /bills/:billId/audit/report.pdf — download do relatório em PDF (só Plus+)
+  // Aceita token via ?token= pra funcionar via window.open sem header Authorization
+  app.get('/:billId/audit/report.pdf', {
+    onRequest: async (req) => {
+      const { token } = (req.query as { token?: string }) ?? {}
+      if (token && !req.headers.authorization) {
+        req.headers.authorization = `Bearer ${token}`
+      }
+    },
+  }, async (req, reply) => {
+    const { sub } = req.user as { sub: string }
+    const { billId } = req.params as { billId: string }
+    try {
+      const pdf = await service.generateAuditPdf(billId, sub)
+      reply
+        .type('application/pdf')
+        .header('Content-Disposition', `attachment; filename="auditoria-${billId}.pdf"`)
+        .send(pdf)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao gerar PDF.'
+      return reply.status(400).send({ error: msg })
+    }
+  })
+
   // GET /bills/:billId/audit — devolve o relatório salvo (ou roda a 1ª vez se não existir)
   app.get('/:billId/audit', async (req, reply) => {
     const { sub } = req.user as { sub: string }

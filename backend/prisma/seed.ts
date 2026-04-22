@@ -453,6 +453,7 @@ async function main() {
       maxUsers: 2,
       aiExtractionsPerMonth: 30,
       allowBillReaudit: true,
+      allowAuditPdfExport: true,
       order: 3,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas'],
     },
@@ -465,6 +466,7 @@ async function main() {
       maxUsers: 10,
       aiExtractionsPerMonth: 200,
       allowBillReaudit: true,
+      allowAuditPdfExport: true,
       order: 4,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas', 'multiunidades', 'painel-administrativo'],
     },
@@ -477,6 +479,7 @@ async function main() {
       maxUsers: 999,
       aiExtractionsPerMonth: null, // ilimitado
       allowBillReaudit: true,
+      allowAuditPdfExport: true,
       order: 5,
       moduleSlugs: ['cadastro-360', 'contas-leitura', 'leitura-inteligente', 'consumo-economia', 'solar-analytics', 'alertas-inteligentes', 'relatorios-360', 'central-dicas', 'multiunidades', 'painel-administrativo', 'portal-parceiro'],
     },
@@ -490,6 +493,7 @@ async function main() {
         aiExtractionsPerMonth: planData.aiExtractionsPerMonth,
         features: planData.features,
         allowBillReaudit: planData.allowBillReaudit ?? false,
+        allowAuditPdfExport: planData.allowAuditPdfExport ?? false,
       },
       create: planData,
     })

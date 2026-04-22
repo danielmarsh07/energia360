@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MapPin, Zap, FileText, BarChart3, BookOpen,
-  Bell, User, LogOut, Sun, Settings, CreditCard,
+  Bell, User, LogOut, Sun, Settings, CreditCard, Shield,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/store/auth.store'
@@ -14,6 +14,7 @@ const navItems = [
   { to: '/unidades', icon: MapPin, label: 'Minhas Unidades' },
   { to: '/pontos-de-energia', icon: Zap, label: 'Pontos de Energia' },
   { to: '/contas', icon: FileText, label: 'Contas' },
+  { to: '/recuperacoes', icon: Shield, label: 'Recuperações' },
   { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
   { to: '/alertas', icon: Bell, label: 'Alertas' },
   { to: '/dicas', icon: BookOpen, label: 'Dicas' },

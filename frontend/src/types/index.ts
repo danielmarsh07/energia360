@@ -8,7 +8,11 @@ export type DocumentType = 'CPF' | 'CNPJ'
 export type ContactType = 'EMAIL' | 'PHONE' | 'WHATSAPP'
 export type EnergyPointType = 'RESIDENTIAL' | 'COMMERCIAL' | 'RURAL' | 'INDUSTRIAL'
 export type BillStatus = 'PENDING' | 'UPLOADED' | 'PROCESSING' | 'EXTRACTED' | 'VALIDATED' | 'FAILED'
-export type AlertType = 'HIGH_CONSUMPTION' | 'HIGH_BILL' | 'GENERATION_DROP' | 'SOLAR_ISSUE' | 'INCONSISTENT_READING' | 'MISSING_BILL' | 'GENERAL'
+export type AlertType =
+  | 'HIGH_CONSUMPTION' | 'HIGH_BILL' | 'GENERATION_DROP' | 'SOLAR_ISSUE'
+  | 'INCONSISTENT_READING' | 'MISSING_BILL'
+  | 'ICMS_OVERCHARGE' | 'FIO_B_OVER_LIMIT' | 'CREDITS_EXPIRING' | 'PIS_COFINS_REFUND'
+  | 'GENERAL'
 export type AlertSeverity = 'INFO' | 'WARNING' | 'CRITICAL'
 export type TutorialCategory = 'SOLAR_BASICS' | 'BILLING' | 'MONITORING' | 'MAINTENANCE' | 'FAQ' | 'SAVINGS'
 
@@ -146,6 +150,12 @@ export interface Alert {
   referenceYear?: number
   createdAt: string
   addressUnit?: { name: string }
+  // Auditoria automática
+  billId?: string | null
+  ruleId?: string | null
+  monthlyImpact?: number | null
+  yearlyImpact?: number | null
+  actionUrl?: string | null
 }
 
 export interface TutorialArticle {

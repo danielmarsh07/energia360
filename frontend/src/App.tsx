@@ -19,6 +19,7 @@ import BillsPage from '@/pages/BillsPage'
 import BillDetailPage from '@/pages/BillDetailPage'
 import ReportsPage from '@/pages/ReportsPage'
 import AlertsPage from '@/pages/AlertsPage'
+import RecuperacoesPage from '@/pages/RecuperacoesPage'
 import TutorialsPage from '@/pages/TutorialsPage'
 import ProfilePage from '@/pages/ProfilePage'
 import PlansPage from '@/pages/PlansPage'
@@ -57,6 +58,7 @@ export default function App() {
               <Route path="/contas/:id" element={<BillDetailPage />} />
               <Route path="/relatorios" element={<ReportsPage />} />
               <Route path="/alertas" element={<AlertsPage />} />
+              <Route path="/recuperacoes" element={<RecuperacoesPage />} />
               <Route path="/dicas" element={<TutorialsPage />} />
               <Route path="/dicas/:slug" element={<TutorialsPage />} />
               <Route path="/perfil" element={<ProfilePage />} />

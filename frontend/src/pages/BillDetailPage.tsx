@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, CheckCircle, Edit2, Save, Zap, DollarSign, Sun, Activity, ShieldAlert, Scale, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Edit2, Save, Zap, DollarSign, Sun, Activity, ShieldAlert, Scale, Sparkles, ChevronDown, ChevronUp, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { billsApi, getApiError, type AuditFinding, type AuditReportWithMeta } from '@/services/api'
+import { billsApi, plansApi, getApiError, type AuditFinding, type AuditReportWithMeta } from '@/services/api'
 import { UtilityBill } from '@/types'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -131,14 +131,21 @@ function AuditSection({ billId }: { billId: string }) {
     retry: false,
   })
 
-  // Mutation pra forçar re-análise (só Premium)
+  // Plano atual — pra decidir se mostra botão de PDF + refazer análise
+  const { data: subscription } = useQuery<{ plan?: { allowAuditPdfExport?: boolean; allowBillReaudit?: boolean } }>({
+    queryKey: ['subscription'],
+    queryFn: plansApi.getSubscription,
+    staleTime: 10 * 60 * 1000,
+  })
+  const canExportPdf = !!subscription?.plan?.allowAuditPdfExport
+
+  // Mutation pra forçar re-análise (só planos superiores)
   const reauditMutation = useMutation({
     mutationFn: () => billsApi.auditForce(billId),
     onSuccess: (fresh) => {
       queryClient.setQueryData(['bill-audit', billId], fresh)
       if (fresh.cached) {
-        // Backend devolveu o cache porque plano não permite — avisa
-        toast.error(fresh.message ?? 'Faça upgrade para Premium para refazer a auditoria.')
+        toast.error(fresh.message ?? 'Faça upgrade para refazer a auditoria.')
       } else {
         toast.success('Auditoria atualizada.')
       }
@@ -161,21 +168,33 @@ function AuditSection({ billId }: { billId: string }) {
         }
         action={
           data ? (
-            data.canReaudit ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<Sparkles size={14} />}
-                onClick={() => reauditMutation.mutate()}
-                loading={reauditMutation.isPending}
-              >
-                Refazer análise
-              </Button>
-            ) : (
-              <Link to="/planos" className="text-xs text-gray-500 hover:text-primary-600 inline-flex items-center gap-1">
-                <Sparkles size={12} /> Refazer análise disponível em <strong className="text-primary-600">planos superiores</strong>
-              </Link>
-            )
+            <div className="flex items-center gap-2">
+              {canExportPdf && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Download size={14} />}
+                  onClick={() => window.open(billsApi.auditPdfUrl(billId), '_blank')}
+                >
+                  PDF
+                </Button>
+              )}
+              {data.canReaudit ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Sparkles size={14} />}
+                  onClick={() => reauditMutation.mutate()}
+                  loading={reauditMutation.isPending}
+                >
+                  Refazer
+                </Button>
+              ) : (
+                <Link to="/planos" className="text-xs text-gray-500 hover:text-primary-600 inline-flex items-center gap-1">
+                  <Sparkles size={12} /> Refazer é <strong className="text-primary-600">plano superior</strong>
+                </Link>
+              )}
+            </div>
           ) : null
         }
       />
